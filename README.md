@@ -15,9 +15,13 @@ Use of the krikzz.com source code for the Windows C# utility is with permission
   - ``export GOPATH=~/golang``
 - Fetch via go
   - ``go get github.com/grantek/fkmd``
+- Build and install into $GOPATH
+  - ``go install github.com/grantek/fkmd``
+- Run installed binary
+  - ``$GOPATH/bin/fkmd``
 
 ## Usage
-
+```
 fkmd usage:
   -autoname
         Read ROM name and generate filenames to save ROM/RAM data
@@ -37,4 +41,4 @@ fkmd usage:
         Write supplied RAM data to cartridge
   -writerom
         (Flash cart only) Write ROM data to flash
-
+```
