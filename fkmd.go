@@ -252,7 +252,7 @@ func WriteRom(d *device.Device, romfile string) error {
 	fmt.Println("Flash erase...")
 	d.FlashResetBypass()
 
-	for i = 0; i < romsize; i++ {
+	for i = 0; i < romsize; i += 65536 {
 		d.FlashErase(i)
 		fmt.Printf("*")
 	}

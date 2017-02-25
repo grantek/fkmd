@@ -229,7 +229,7 @@ func (d *Device) ReadWord(addr int64) (uint16, error) {
 // we can only write to the lower byte of a word-aligned address
 // since cartridge RAM is 8-bit
 func (d *Device) WriteByte(addr int, data byte) (err error) {
-	cmd := make([]byte, 5)
+	cmd := make([]byte, 8)
 	addr /= 2
 
 	cmd[0] = CMD_ADDR
@@ -364,7 +364,7 @@ func (d *Device) FlashWrite(buf []byte) error {
 	cmd := make([]byte, buf_len*6)
 	offset := 0
 
-	for i := 0; i < (buf_len * 6); i++ {
+	for i := 0; i < (buf_len * 6); i += 6 {
 		cmd[0+i] = CMD_WR | PAR_SINGE | PAR_MODE8
 		cmd[1+i] = 0xA0
 		cmd[2+i] = CMD_WR | PAR_SINGE | PAR_INC
