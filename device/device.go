@@ -265,13 +265,13 @@ func (d *Device) WriteWord(addr int64, data uint16) (err error) {
 	return
 }
 
-func (d *Device) Write(p []byte) (n int, err error) {
+func (d *Device) Write(p []byte) (offset int, err error) {
 	var (
+		n       int = 0      //total bytes written
 		req_len int = len(p) //total bytes left
 		wr_len  int          //current write chunk size
 		wrote   int          //bytes written in current writeloop iteration
 	)
-	n = 0 //total bytes written
 	err = nil
 
 	for req_len > 0 {
@@ -290,7 +290,7 @@ func (d *Device) Write(p []byte) (n int, err error) {
 		if err != nil {
 			return 0, err
 		}
-		wrote, err = d.fd.Write(p[n : n+wr_len])
+		wrote, err = d.fd.Write(p[offset+n : offset+n+wr_len])
 		n += wrote
 		if err != nil {
 			return n, err
@@ -315,7 +315,7 @@ func (d *Device) FlashErase(addr int64) error {
 
 		cmd[6+i] = CMD_WR | PAR_SINGE | PAR_MODE8
 		cmd[7+i] = 0x30
-		addr += 4096 //junp 8kib, for a total of 64kib covered
+		addr += 4096 //jump 8kib, for a total of 64kib covered
 	}
 
 	d.WriteWord(0x555*2, 0xaa) //write 0x00aa to 0xaaa

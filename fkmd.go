@@ -258,6 +258,8 @@ func WriteRom(d *device.Device, romfile string) error {
 	}
 	fmt.Printf("\n")
 
+	d.FlashUnlockBypass()
+	d.Seek(0, io.SeekStart)
 	fmt.Println("Flash write...")
 	for i = 0; i < fblen; i += blocklen {
 		if i+blocklen > fblen {
