@@ -170,7 +170,7 @@ func RamAvailable(d *device.Device) bool {
 		err        error
 	)
 
-	d.WriteWord(0xA13000, 0xffff) //bank switch RAM in
+    d.RamEnable()
 	first_word, err = d.ReadWord(0x200000)
 	d.WriteWord(0x200000, uint16(first_word^0xffff))
 	tmp, err = d.ReadWord(0x200000)
@@ -198,7 +198,7 @@ func GetRamSize(d *device.Device) int {
 	)
 
 	//This commented-out write was in the original code
-	//Device.writeWord(0xA13000, 0x0001);
+	//Device.writeWord(0xA13000, 0x0001); //RamDisable()
 
 	if RamAvailable(d) == false { //RAM is banskswitched in here?
 		return 0
@@ -242,7 +242,7 @@ func checkRomSize(d *device.Device, base_addr int, max_len int) int {
 	sector0 = make([]byte, 256)
 	sector = make([]byte, 256)
 
-	d.WriteWord(0xA13000, 0x0000) //RAM disable
+    d.RamDisable()
 	d.Seek(int64(base_addr), io.SeekStart)
 	d.Read(sector0)
 
@@ -271,6 +271,7 @@ func checkRomSize(d *device.Device, base_addr int, max_len int) int {
 	return offset
 }
 
+// todo: seems to leave RAM in inconsistent bankswitch state
 func GetRomSize(d *device.Device) (romsize int) {
 	var (
 		v            byte
@@ -286,7 +287,7 @@ func GetRomSize(d *device.Device) (romsize int) {
 	if RamAvailable(d) { //RAM enable
 		ram = true
 		extra_rom = true
-		d.WriteWord(0xA13000, 0x0000) //RAM disable
+        d.RamDisable()
 		d.Seek(0x200000, io.SeekStart)
 		d.Read(sector0)
 		d.Seek(0x200000, io.SeekStart)
@@ -299,8 +300,8 @@ func GetRomSize(d *device.Device) (romsize int) {
 		if extra_rom == true {
 			extra_rom = false
 			d.Seek(0x200000+0x10000, io.SeekStart)
-			d.Read(sector)                //wtf?
-			d.WriteWord(0xA13000, 0xffff) //RAM ensable
+			d.Read(sector)                //wtf? logic from original driver
+            d.RamEnable()
 			d.Seek(0x200000, io.SeekStart)
 			d.Read(sector)
 			for i, v = range sector0 {

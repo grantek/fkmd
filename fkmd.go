@@ -100,10 +100,8 @@ func ReadRam(d *device.Device, ramfile string, autoname bool) {
 		defer f.Close()
 	}
 
-	d.SetDelay(1)
-	d.WriteWord(0xA13000, 0xffff)       //RAM enable
-	defer d.WriteWord(0xA13000, 0x0000) //RAM disable
-	defer d.SetDelay(0)
+    d.RamEnable()
+	defer d.RamDisable()
 	d.Seek(0x200000, io.SeekStart)
 	buf := make([]byte, ramsize)
 
@@ -167,11 +165,9 @@ func WriteRam(d *device.Device, ramfile string) error {
 		return errors.New(fmt.Sprintf("error: read data beyond %d bytes from ramfile \"%s\": %x", ramsize, ramfile, nextbyte[0]))
 	}
 
-	d.SetDelay(1)
-	d.WriteWord(0xA13000, 0xffff) //RAM enable
+    d.RamEnable()
+	defer d.RamDisable()
 	d.Seek(0x200000, io.SeekStart)
-	defer d.WriteWord(0xA13000, 0x0000) //RAM disable
-	defer d.SetDelay(0)
 
 	n, err = d.Write(buf)
 	if err != nil {
