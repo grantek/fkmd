@@ -1,9 +1,10 @@
 package cart
+//These functions currently work on the kfkmd directly, but should be made to work on a bank/memcart interface
 
 import (
 	"errors"
 	"fmt"
-	"github.com/grantek/fkmd/device"
+	"github.com/grantek/fkmd/krikzz_fkmd"
 	"io"
 )
 
@@ -64,7 +65,7 @@ func GetRomRegion(rom_hdr []byte) string {
 	return "X"
 }
 
-func GetRomName(d *device.Device) (string, error) {
+func GetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
 	var (
 		n          int
 		err        error
@@ -163,7 +164,7 @@ NameLoop:
 	return namestring, nil
 }
 
-func RamAvailable(d *device.Device) bool {
+func RamAvailable(d *krikzz_fkmd.Fkmd) bool {
 	var (
 		first_word uint16
 		tmp        uint16
@@ -186,7 +187,7 @@ func RamAvailable(d *device.Device) bool {
 	return true
 }
 
-func GetRamSize(d *device.Device) int {
+func GetRamSize(d *krikzz_fkmd.Fkmd) int {
 	var (
 		ram_size       int64
 		first_word     uint16
@@ -229,7 +230,7 @@ func GetRamSize(d *device.Device) int {
 
 }
 
-func checkRomSize(d *device.Device, base_addr int, max_len int) int {
+func checkRomSize(d *krikzz_fkmd.Fkmd, base_addr int, max_len int) int {
 	var (
 		eq          bool
 		base_offset int = 0x8000
@@ -272,7 +273,7 @@ func checkRomSize(d *device.Device, base_addr int, max_len int) int {
 }
 
 // todo: seems to leave RAM in inconsistent bankswitch state
-func GetRomSize(d *device.Device) (romsize int) {
+func GetRomSize(d *krikzz_fkmd.Fkmd) (romsize int) {
 	var (
 		v            byte
 		i            int

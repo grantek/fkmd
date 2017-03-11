@@ -5,108 +5,39 @@ import (
 	"io"
 	"errors"
 
-	"github.com/jacobsa/go-serial/serial"
 )
 
-const (
-	CMD_ADDR   byte = 0
-	CMD_LEN    byte = 1
-	CMD_RD     byte = 2
-	CMD_WR     byte = 3
-	CMD_RY     byte = 4
-	CMD_DELAY  byte = 5
-	PAR_MODE8  byte = 16
-	PAR_DEV_ID byte = 32
-	PAR_SINGE  byte = 64
-	PAR_INC    byte = 128
-)
 
-type Device struct {
-	fd  io.ReadWriteCloser
-	opt serial.OpenOptions
+
+type SerialDevice interface {
+    io.ReadWriteSeeker
+    io.Closer
+
+    func (d *Device)ReadWord(addr int64) (uint16, error)
+    func (d *Device)WriteByte(addr int, data byte) (err error)
+    func (d *Device)WriteWord(addr int64, data uint16) (err error)
+
+    func (d *Device)Connect() error
+    func (d *Device)Disconnect() error
+    func (d *Device)RamEnable() error
+    func (d *Device)RamDisable() error
+    func (d *Device)GetID() (int, error)
+
 }
 
-func New() *Device {
-	var d Device
-	return &d
+type MemCart interface {
+    func (mc *MemCart)NumBanks() (int, error)
+    func (mc *MemCart)GetCurrentBank() (*MemBank, error)
+    func (mc *MemCart)SwitchBank(int) error
 }
 
-func (d *Device) SetOptions(options serial.OpenOptions) {
-	d.opt = options
+type MemBank interface {
+    io.ReadWriteSeeker
+    func (mb *MemBank)GetName() (string, error)
 }
 
-func (d *Device) Connect() error {
-	f, err := serial.Open(d.opt)
-	d.fd = f
-	if err != nil {
-		return err
-	}
+#old code
 
-	//my flashkit device ID is 257, which matches this logic
-	id, err := d.GetID()
-	if (id&0xff) == (id>>8) && id != 0 {
-		//original code doesn't close and reopen
-		d.fd.Close()
-		//port.WriteTimeout = 2000;
-		//port.ReadTimeout = 2000;
-		d.opt.InterCharacterTimeout = 2000
-		f, err := serial.Open(d.opt)
-		d.fd = f
-		if err != nil {
-			return err
-		}
-		//need to redo GetID after reopen
-		_, err = d.GetID()
-		err = d.SetDelay(0)
-	}
-	return err
-}
-
-func (d *Device) Disconnect() error {
-	e := d.fd.Close()
-	if e != nil {
-		d.fd = nil
-	}
-	return e
-}
-
-func (d *Device) GetID() (int, error) {
-	var id int = 0
-	cmd := make([]byte, 1)
-	data := make([]byte, 2)
-
-	cmd[0] = CMD_RD | PAR_SINGE | PAR_DEV_ID
-	n, err := d.fd.Write(cmd)
-	if err != nil {
-		return 0, err
-	}
-	if n < 1 {
-		return 0, errors.New(fmt.Sprintf("error: short write: %d of %d bytes", n, 1))
-	}
-
-	n, err = d.fd.Read(data)
-	if err != nil {
-		return 0, err
-	}
-	if n < 2 {
-		return 0, errors.New(fmt.Sprintf("error: short read: %d of %d bytes", n, 2))
-	}
-
-	id = int(data[0]) << 8
-	id |= int(data[1])
-
-	return id, nil
-}
-
-func (d *Device) SetDelay(val byte) error {
-	cmd := make([]byte, 2)
-	cmd[0] = CMD_DELAY
-	cmd[1] = val
-
-	_, err := d.fd.Write(cmd)
-
-	return err
-}
 
 func (d *Device) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
