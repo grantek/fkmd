@@ -13,7 +13,8 @@ import (
 
 	"github.com/jacobsa/go-serial/serial"
 	"github.com/grantek/fkmd/cart"
-	"github.com/grantek/fkmd/device"
+	//"github.com/grantek/fkmd/device"
+	"github.com/grantek/fkmd/krikzz_fkmd"
 )
 
 func usage() {
@@ -22,7 +23,8 @@ func usage() {
 	os.Exit(-1)
 }
 
-func ReadRom(d *device.Device, romfile string, autoname bool) {
+//md specific
+func ReadRom(d *krikzz_fkmd.Fkmd, romfile string, autoname bool) {
 	var (
 		romname   string
 		romsize   int
@@ -65,7 +67,7 @@ func ReadRom(d *device.Device, romfile string, autoname bool) {
 	fmt.Println()
 }
 
-func ReadRam(d *device.Device, ramfile string, autoname bool) {
+func ReadRam(d *krikzz_fkmd.Fkmd, ramfile string, autoname bool) {
 	var (
 		romname string
 		ramsize int
@@ -121,7 +123,7 @@ func ReadRam(d *device.Device, ramfile string, autoname bool) {
 	}
 }
 
-func WriteRam(d *device.Device, ramfile string) error {
+func WriteRam(d *krikzz_fkmd.Fkmd, ramfile string) error {
 	var (
 		ramsize int
 		f       *os.File
@@ -192,7 +194,7 @@ func WriteRam(d *device.Device, ramfile string) error {
 	return nil
 }
 
-func WriteRom(d *device.Device, romfile string) error {
+func WriteRom(d *krikzz_fkmd.Fkmd, romfile string) error {
 	var (
 		romsize  int64
 		blocklen int64 = 4096
@@ -407,7 +409,7 @@ func main() {
 		Rs485RtsHighAfterSend:  *rs485HighAfterSend,
 	}
 
-	var d = device.New()
+	var d = krikzz_fkmd.New()
 	d.SetOptions(options)
 	err = d.Connect()
 
