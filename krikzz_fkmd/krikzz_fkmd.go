@@ -19,6 +19,8 @@ const (
 	PAR_DEV_ID byte = 32
 	PAR_SINGE  byte = 64
 	PAR_INC    byte = 128
+
+    WRITE_BLOCK_SIZE int64 = 65536
 )
 
 type Fkmd struct {
@@ -111,8 +113,8 @@ func (d *Fkmd) SetDelay(val byte) error {
 func (d *Fkmd) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekCurrent:
-		return -1, errors.New("SeekCurrent not implemented")
-	case io.SeekEnd:
+		return 0, errors.New("SeekCurrent not implemented")
+    case io.SeekEnd: //TODO: figure out what to return
 		return -1, errors.New("SeekEnd not implemented")
 	}
 
@@ -302,6 +304,9 @@ func (d *Fkmd) Write(p []byte) (offset int, err error) {
 
 // Erase 64KiB from addr (32K words)
 func (d *Fkmd) FlashErase(addr int64) error {
+    if addr % WRITE_BLOCK_SIZE > 0 {
+        return errors.New(fmt.Sprintf("Flash erase request is not aligned to a %iKiB block", WRITE_BLOCK_SIZE/1024))
+    }
 	cmd := make([]byte, 8*8)
 	addr /= 2
 
@@ -358,7 +363,7 @@ func (d *Fkmd) FlashResetBypass() {
 // expected use is to perform full erase, seek to 0, then run this with chunks of data until complete
 func (d *Fkmd) FlashWrite(buf []byte) error {
 	if len(buf)%2 == 1 {
-		return errors.New("FlashWrite: odd write lengths not supported")
+		return errors.New("odd write lengths not supported")
 	}
 	buf_len := len(buf) / 2
 	cmd := make([]byte, buf_len*6)
@@ -398,3 +403,41 @@ func (d *Fkmd)RamDisable() error {
     return err
 }
 
+type Mdrom struct {
+    d *Fkmd
+    addr int64
+}
+
+func (m *Mdrom)Read(p []byte) (n int, err error) {
+    n = 0
+    err = m.d.RamDisable() //appropriate?
+    if err != nil {
+        return
+    }
+    return m.d.Read(p)
+}
+
+func (m *Mdrom) Seek(offset int64, whence int) (newoffset int64, err error) {
+	switch whence {
+	case io.SeekCurrent:
+		offset += m.addr
+    case io.SeekEnd:
+		return -1, errors.New("SeekEnd not implemented")
+	}
+
+    newoffset, err = m.d.Seek(offset, whence)
+    m.addr = newoffset
+    return newoffset, err
+}
+
+func (m *Mdrom) Write(p []byte) (offset int, err error) {
+    var (
+        writelen int64
+    )
+    writelen = int64(len(p))
+    if writelen % WRITE_BLOCK_SIZE > 0 {
+        fmt.Println(fmt.Sprintf("Attempting to write less than %iKiB, flash erase will be larger than write", WRITE_BLOCK_SIZE/1024))
+    }
+    return 0, nil
+
+}

@@ -5,20 +5,20 @@ import (
 
 )
 
-type CartIODevice interface {
-    io.ReadWriteSeeker
-    io.Closer
+//type CartIODevice interface {
+//    io.ReadWriteSeeker
+//    io.Closer
 
-    ReadWord(addr int64) (uint16, error)
-    WriteByte(addr int, data byte) (err error)
-    WriteWord(addr int64, data uint16) (err error)
+    //ReadWord(addr int64) (uint16, error)
+    //WriteByte(addr int, data byte) (err error)
+    //WriteWord(addr int64, data uint16) (err error)
 
-    Connect() error
-    Disconnect() error
-    RamEnable() error
-    RamDisable() error
-    GetID() (int, error)
-}
+    //Connect() error
+    //Disconnect() error
+    //RamEnable() error
+    //RamDisable() error
+    //GetID() (int, error)
+//}
 
 type MemCart interface {
     NumBanks() (int, error)
