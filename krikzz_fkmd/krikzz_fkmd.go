@@ -267,9 +267,8 @@ func (d *Fkmd) WriteWord(addr int64, data uint16) (err error) {
 	return
 }
 
-func (d *Fkmd) Write(p []byte) (offset int, err error) {
+func (d *Fkmd) Write(p []byte) (n int, err error) {
 	var (
-		n       int = 0      //total bytes written
 		req_len int = len(p) //total bytes left
 		wr_len  int          //current write chunk size
 		wrote   int          //bytes written in current writeloop iteration
@@ -292,7 +291,7 @@ func (d *Fkmd) Write(p []byte) (offset int, err error) {
 		if err != nil {
 			return 0, err
 		}
-		wrote, err = d.fd.Write(p[offset+n : offset+n+wr_len])
+		wrote, err = d.fd.Write(p[n : n+wr_len])
 		n += wrote
 		if err != nil {
 			return n, err
@@ -410,12 +409,16 @@ type MDRom struct {
 }
 
 func (m *MDRom)Read(p []byte) (n int, err error) {
+    /*
     n = 0
     err = m.d.RamDisable() //appropriate?
     if err != nil {
         return
     }
-    return m.d.Read(p)
+    */
+    n, err = m.d.Read(p)
+    m.addressCur += int64(n)
+    return
 }
 
 func (m *MDRom) Seek(offset int64, whence int) (newoffset int64, err error) {
@@ -433,28 +436,74 @@ func (m *MDRom) Seek(offset int64, whence int) (newoffset int64, err error) {
         offset = m.d.GetRomSize() - offset
 	}
 
-    newoffset, err = m.d.Seek(offset, whence)
+    newoffset, err = m.d.Seek(offset, io.SeekStart)
     m.addressCur = newoffset
-    return newoffset, err
+    return
 }
 
-//maybe allow incremental writing, erasing pages as they're reached?
-func (m *MDRom) Write(p []byte) (offset int, err error) {
+//should allow incremental writing, erasing pages as they're reached?
+func (m *MDRom) Write(p []byte) (n int, err error) {
     var (
-        writelen int64
+        writelen int
     )
-    writelen = int64(len(p))
-    if writelen % WRITE_BLOCK_SIZE > 0 {
+    writelen = len(p)
+    if int64(writelen) % WRITE_BLOCK_SIZE > 0 {
         fmt.Println(fmt.Sprintf("Attempting to write less than %iKiB, flash erase will be larger than write", WRITE_BLOCK_SIZE/1024))
     }
     err = m.d.FlashWrite(p)
 
     if err != nil {
-        offset += len(p)
+        n = writelen
+        m.addressCur += int64(n)
     }
 
-    return offset, err
+    return
+}
 
+///////////////mdram
+type MDRam struct {
+    d *Fkmd
+    addressCur int64
+}
+func (m *MDRam) Read(p []byte) (n int, err error) {
+    /*
+    n = 0
+    if m.addressCur == 0 {
+        err = m.d.RamEnable()
+    }
+    if err != nil {
+        return
+    }
+    */
+    n, err = m.d.Read(p)
+    m.addressCur += int64(n)
+    return
+}
+
+func (m *MDRam) Write(p []byte) (n int, err error) {
+    n, err = m.d.Write(p)
+    m.addressCur += int64(n)
+    return
+}
+
+func (m *MDRam) Seek(offset int64, whence int) (newoffset int64, err error) {
+    var (
+        ramsize int64
+    )
+	switch whence {
+	case io.SeekCurrent:
+		offset += m.addressCur
+    case io.SeekEnd:
+        ramsize = m.d.GetRamSize()
+        if(offset > ramsize) {
+            return ramsize - m.addressCur - 1, errors.New(fmt.Sprintf("Trying to seek %i from io.SeekEnd of RAM with detected length %i", offset, romsize))
+        }
+        offset = m.d.GetRamSize() - offset
+	}
+
+    newoffset, err = m.d.Seek(offset+0x20000, io.SeekStart)
+    m.addressCur = newoffset
+    return
 }
 
 ///////////////mdcart
