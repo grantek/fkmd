@@ -496,7 +496,7 @@ func (m *MDRam) Seek(offset int64, whence int) (newoffset int64, err error) {
     case io.SeekEnd:
         ramsize = m.d.GetRamSize()
         if(offset > ramsize) {
-            return ramsize - m.addressCur - 1, errors.New(fmt.Sprintf("Trying to seek %i from io.SeekEnd of RAM with detected length %i", offset, romsize))
+            return ramsize - m.addressCur - 1, errors.New(fmt.Sprintf("Trying to seek %i from io.SeekEnd of RAM with detected length %i", offset, ramsize))
         }
         offset = m.d.GetRamSize() - offset
 	}
@@ -699,7 +699,7 @@ NameLoop:
 	return namestring, nil
 }
 
-func RamAvailable(d *Fkmd) bool {
+func (d *Fkmd) RamAvailable() bool {
 	var (
 		first_word uint16
 		tmp        uint16
@@ -722,7 +722,7 @@ func RamAvailable(d *Fkmd) bool {
 	return true
 }
 
-func GetRamSize(d *Fkmd) int {
+func (d *Fkmd) GetRamSize() int64 {
 	var (
 		ram_size       int64
 		first_word     uint16
@@ -736,7 +736,7 @@ func GetRamSize(d *Fkmd) int {
 	//This commented-out write was in the original code
 	//Device.writeWord(0xA13000, 0x0001); //RamDisable()
 
-	if RamAvailable(d) == false { //RAM is banskswitched in here?
+	if d.RamAvailable() == false { //RAM is banskswitched in here?
 		return 0
 	}
 
@@ -761,7 +761,7 @@ func GetRamSize(d *Fkmd) int {
 	}
 
 	//Save RAM is 8-bit on a 16-bit system, this returns the real size in bytes
-	return int(ram_size / 2)
+	return ram_size / 2
 
 }
 
@@ -807,7 +807,8 @@ func checkRomSize(d *Fkmd, base_addr int64, max_len int64) int64 {
 	return offset
 }
 
-// todo: seems to leave RAM in inconsistent bankswitch state
+// Should be called with RAM disabled, will return with RAM disabled and address
+// cursor inconsistent 
 func (d *Fkmd)GetRomSize() (romsize int64) {
 	var (
 		v            byte
@@ -819,8 +820,8 @@ func (d *Fkmd)GetRomSize() (romsize int64) {
 	var ram bool = false
 	var extra_rom bool = false
 
-	//
-	if RamAvailable(d) { //RAM enable
+    defer d.RamDisable()
+	if d.RamAvailable() { //RAM enable
 		ram = true
 		extra_rom = true
         d.RamDisable()
