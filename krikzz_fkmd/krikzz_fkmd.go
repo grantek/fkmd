@@ -401,7 +401,7 @@ func (d *Fkmd)RamDisable() error {
 	err = d.SetDelay(0)
     return err
 }
-////////////////MDRom
+////////////////MDRom (MemBank)
 
 type MDRom struct {
     d *Fkmd
@@ -460,7 +460,11 @@ func (m *MDRom) Write(p []byte) (n int, err error) {
     return
 }
 
-///////////////mdram
+func (m *MdRom) GetName() (string, error) {
+    return "mdrom"
+}
+
+///////////////mdram (MemBank)
 type MDRam struct {
     d *Fkmd
     addressCur int64
@@ -506,7 +510,11 @@ func (m *MDRam) Seek(offset int64, whence int) (newoffset int64, err error) {
     return
 }
 
-///////////////mdcart
+func (m *MdRom) GetName() (string, error) {
+    return "mdrom"
+}
+
+///////////////mdcart (MemCart)
 type MDCart struct {
     d   *Fkmd
     ramAvailable bool
@@ -530,13 +538,20 @@ func (mdc *MDCart) SwitchBank(reqbank int) error {
         m.d = mdc.d
         addr, err := m.d.Seek(0, io.SeekStart)
         m.addressCur = addr
+        mdc.currentBank = &m
         return err
     }
     if reqbank == 1 {
         if !mdc.ramAvailable {
             return errors.New("req ram, no ram")
         }
-        return errors.New("ram not implemented in MDCart")
+        var m MDRam
+        m.d = mdc.d
+        addr, err := m.d.Seek(0, io.SeekStart)
+        m.addressCur = addr
+        mdc.currentBank = &m
+        return err
+        //return errors.New("ram not implemented in MDCart")
     }
     return nil
 }
