@@ -1,4 +1,5 @@
 package cart
+
 //These functions currently work on the kfkmd directly, but should be made to work on a bank/memcart interface
 
 import (
@@ -171,7 +172,7 @@ func RamAvailable(d *krikzz_fkmd.Fkmd) bool {
 		err        error
 	)
 
-    d.RamEnable()
+	d.RamEnable()
 	first_word, err = d.ReadWord(0x200000)
 	d.WriteWord(0x200000, uint16(first_word^0xffff))
 	tmp, err = d.ReadWord(0x200000)
@@ -243,7 +244,7 @@ func checkRomSize(d *krikzz_fkmd.Fkmd, base_addr int, max_len int) int {
 	sector0 = make([]byte, 256)
 	sector = make([]byte, 256)
 
-    d.RamDisable()
+	d.RamDisable()
 	d.Seek(int64(base_addr), io.SeekStart)
 	d.Read(sector0)
 
@@ -288,7 +289,7 @@ func GetRomSize(d *krikzz_fkmd.Fkmd) (romsize int) {
 	if RamAvailable(d) { //RAM enable
 		ram = true
 		extra_rom = true
-        d.RamDisable()
+		d.RamDisable()
 		d.Seek(0x200000, io.SeekStart)
 		d.Read(sector0)
 		d.Seek(0x200000, io.SeekStart)
@@ -301,8 +302,8 @@ func GetRomSize(d *krikzz_fkmd.Fkmd) (romsize int) {
 		if extra_rom == true {
 			extra_rom = false
 			d.Seek(0x200000+0x10000, io.SeekStart)
-			d.Read(sector)                //wtf? logic from original driver
-            d.RamEnable()
+			d.Read(sector) //wtf? logic from original driver
+			d.RamEnable()
 			d.Seek(0x200000, io.SeekStart)
 			d.Read(sector)
 			for i, v = range sector0 {

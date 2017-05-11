@@ -1,11 +1,11 @@
 package krikzz_fkmd
 
 import (
-    "fmt"
-    "io"
-    "errors"
-    "github.com/grantek/fkmd/device"
+	"errors"
+	"fmt"
+	"github.com/grantek/fkmd/device"
 	"github.com/jacobsa/go-serial/serial"
+	"io"
 )
 
 const (
@@ -20,9 +20,9 @@ const (
 	PAR_SINGE  byte = 64
 	PAR_INC    byte = 128
 
-    WRITE_BLOCK_SIZE int64 = 65536
+	WRITE_BLOCK_SIZE int64 = 65536
 
-    RAM_ADDR  int64 = 0x20000
+	RAM_ADDR int64 = 0x20000
 )
 
 type Fkmd struct {
@@ -116,7 +116,7 @@ func (d *Fkmd) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekCurrent:
 		return 0, errors.New("SeekCurrent not implemented")
-    case io.SeekEnd: //TODO: figure out what to return
+	case io.SeekEnd: //TODO: figure out what to return
 		return -1, errors.New("SeekEnd not implemented")
 	}
 
@@ -227,7 +227,7 @@ func (d *Fkmd) ReadWord(addr int64) (uint16, error) {
 	val = uint16(buf[0]) << 8
 	val |= uint16(buf[1])
 
-    #asdf
+	//#asdf
 
 	return val, nil
 
@@ -308,9 +308,9 @@ func (d *Fkmd) Write(p []byte) (n int, err error) {
 
 // Erase 64KiB from addr (32K words)
 func (d *Fkmd) FlashErase(addr int64) error {
-    if addr % WRITE_BLOCK_SIZE > 0 {
-        return errors.New(fmt.Sprintf("Flash erase request is not aligned to a %iKiB block", WRITE_BLOCK_SIZE/1024))
-    }
+	if addr%WRITE_BLOCK_SIZE > 0 {
+		return errors.New(fmt.Sprintf("Flash erase request is not aligned to a %iKiB block", WRITE_BLOCK_SIZE/1024))
+	}
 	cmd := make([]byte, 8*8)
 	addr /= 2
 
@@ -389,191 +389,193 @@ func (d *Fkmd) FlashWrite(buf []byte) error {
 	return err
 }
 
-func (d *Fkmd)RamEnable() error {
-    err := d.SetDelay(1)
-    if err != nil {
-        return err
-    }
+func (d *Fkmd) RamEnable() error {
+	err := d.SetDelay(1)
+	if err != nil {
+		return err
+	}
 	err = d.WriteWord(0xA13000, 0xffff)
-    return err
+	return err
 }
 
-func (d *Fkmd)RamDisable() error {
-    err := d.WriteWord(0xA13000, 0x0000)
-    if err != nil {
-        return err
-    }
+func (d *Fkmd) RamDisable() error {
+	err := d.WriteWord(0xA13000, 0x0000)
+	if err != nil {
+		return err
+	}
 	err = d.SetDelay(0)
-    return err
+	return err
 }
+
 ////////////////MDRom (MemBank)
 
 type MDRom struct {
-    d *Fkmd
-    addressCur int64
-    size int64
+	d          *Fkmd
+	addressCur int64
+	size       int64
 }
 
-func (m *MDRom)Read(p []byte) (n int, err error) {
-    /*
-    n = 0
-    err = m.d.RamDisable() //appropriate?
-    if err != nil {
-        return
-    }
-    */
-    n, err = m.d.Read(p)
-    m.addressCur += int64(n)
-    return
+func (m *MDRom) Read(p []byte) (n int, err error) {
+	/*
+	   n = 0
+	   err = m.d.RamDisable() //appropriate?
+	   if err != nil {
+	       return
+	   }
+	*/
+	n, err = m.d.Read(p)
+	m.addressCur += int64(n)
+	return
 }
 
 func (m *MDRom) Seek(offset int64, whence int) (newoffset int64, err error) {
-    var (
-        romsize int64
-    )
+	var (
+		romsize int64
+	)
 	switch whence {
 	case io.SeekCurrent:
 		offset += m.addressCur
-    case io.SeekEnd:
-        romsize = m.d.GetRomSize()
-        if(offset > romsize) {
-            return romsize - m.addressCur - 1, errors.New(fmt.Sprintf("Trying to seek %i from io.SeekEnd of ROM with detected length %i", offset, romsize))
-        }
-        offset = m.d.GetRomSize() - offset
+	case io.SeekEnd:
+		romsize = m.d.GetRomSize()
+		if offset > romsize {
+			return romsize - m.addressCur - 1, errors.New(fmt.Sprintf("Trying to seek %i from io.SeekEnd of ROM with detected length %i", offset, romsize))
+		}
+		offset = m.d.GetRomSize() - offset
 	}
 
-    newoffset, err = m.d.Seek(offset, io.SeekStart)
-    m.addressCur = newoffset
-    return
+	newoffset, err = m.d.Seek(offset, io.SeekStart)
+	m.addressCur = newoffset
+	return
 }
 
 //should allow incremental writing, erasing pages as they're reached?
 //if not on a page boundary, assume the rest of the page has been erased
 func (m *MDRom) Write(p []byte) (n int, err error) {
-    var (
-        writelen int
-	chunksize int
-    )
-    writelen = len(p)
-    for n <= writelen {
-	chunksize = writelen - n
-	if chunksize > WRITE_BLOCK_SIZE {
-		chunksize = WRITE_BLOCK_SIZE
-	}
-	if m.addressCur % WRITE_BLOCK_SIZE == 0 {
-		md.d.FlashErase(m.addressCur)
-		md.d.Seek(m.addressCur)
-	}
-	chunksize = chunksize - m.addressCur % WRITE_BLOCK_SIZE
-	err = m.d.FlashWrite(p[n:n+chunksize])
+	var (
+		writelen  int
+		chunksize int
+	)
+	writelen = len(p)
+	for n <= writelen {
+		chunksize = writelen - n
+		if chunksize > WRITE_BLOCK_SIZE {
+			chunksize = WRITE_BLOCK_SIZE
+		}
+		if m.addressCur%WRITE_BLOCK_SIZE == 0 {
+			md.d.FlashErase(m.addressCur)
+			md.d.Seek(m.addressCur)
+		}
+		chunksize = chunksize - m.addressCur%WRITE_BLOCK_SIZE
+		err = m.d.FlashWrite(p[n : n+chunksize])
 
-	if err != nil {
-		n += chunksize
-		m.addressCur += int64(n)
-	} else {
-		panic()
+		if err != nil {
+			n += chunksize
+			m.addressCur += int64(n)
+		} else {
+			panic()
+		}
+
 	}
 
-    }
-
-    return
+	return
 }
 
 func (m *MdRom) GetName() (string, error) {
-    return "mdrom"
+	return "mdrom"
 }
 
 ///////////////mdram (MemBank)
 type MDRam struct {
-    d *Fkmd
-    addressCur int64
+	d          *Fkmd
+	addressCur int64
 }
+
 func (m *MDRam) Read(p []byte) (n int, err error) {
-    /*
-    n = 0
-    if m.addressCur == 0 {
-        err = m.d.RamEnable()
-    }
-    if err != nil {
-        return
-    }
-    */
-    n, err = m.d.Read(p)
-    m.addressCur += int64(n)
-    return
+	/*
+	   n = 0
+	   if m.addressCur == 0 {
+	       err = m.d.RamEnable()
+	   }
+	   if err != nil {
+	       return
+	   }
+	*/
+	n, err = m.d.Read(p)
+	m.addressCur += int64(n)
+	return
 }
 
 func (m *MDRam) Write(p []byte) (n int, err error) {
-    n, err = m.d.Write(p)
-    m.addressCur += int64(n)
-    return
+	n, err = m.d.Write(p)
+	m.addressCur += int64(n)
+	return
 }
 
 func (m *MDRam) Seek(offset int64, whence int) (newoffset int64, err error) {
-    var (
-        ramsize int64
-    )
+	var (
+		ramsize int64
+	)
 	switch whence {
 	case io.SeekCurrent:
 		offset += m.addressCur
-    case io.SeekEnd:
-        ramsize = m.d.GetRamSize()
-        if(offset > ramsize) {
-            return ramsize - m.addressCur - 1, errors.New(fmt.Sprintf("Trying to seek %i from io.SeekEnd of RAM with detected length %i", offset, ramsize))
-        }
-        offset = m.d.GetRamSize() - offset
+	case io.SeekEnd:
+		ramsize = m.d.GetRamSize()
+		if offset > ramsize {
+			return ramsize - m.addressCur - 1, errors.New(fmt.Sprintf("Trying to seek %i from io.SeekEnd of RAM with detected length %i", offset, ramsize))
+		}
+		offset = m.d.GetRamSize() - offset
 	}
 
-    newoffset, err = m.d.Seek(offset+RAM_ADDR, io.SeekStart)
-    m.addressCur = newoffset
-    return
+	newoffset, err = m.d.Seek(offset+RAM_ADDR, io.SeekStart)
+	m.addressCur = newoffset
+	return
 }
 
 func (m *MdRom) GetName() (string, error) {
-    return "mdrom"
+	return "mdrom"
 }
 
 ///////////////mdcart (MemCart)
 type MDCart struct {
-    d   *Fkmd
-    ramAvailable bool
-    currentBank *device.MemBank
+	d            *Fkmd
+	ramAvailable bool
+	currentBank  *device.MemBank
 }
 
 func (mdc *MDCart) NumBanks() (int, error) {
-    if mdc.ramAvailable {
-        return 2, nil
-    }
-    return 1, nil
+	if mdc.ramAvailable {
+		return 2, nil
+	}
+	return 1, nil
 }
 
 func (mdc *MDCart) GetCurrentBank() (*device.MemBank, error) {
-    return mdc.currentBank, nil
+	return mdc.currentBank, nil
 }
 
 //always explicitly seeks to 0
 func (mdc *MDCart) SwitchBank(reqbank int) error {
-    if reqbank == 0 {
-        var m MDRom
-        m.d = mdc.d
-        addr, err := m.d.Seek(0, io.SeekStart)
-        m.addressCur = addr
-        mdc.currentBank = &m
-        return err
-    }
-    if reqbank == 1 {
-        if !mdc.ramAvailable {
-            return errors.New("req ram, no ram")
-        }
-        var m MDRam
-        m.d = mdc.d
-        addr, err := m.d.Seek(0, io.SeekStart)
-        m.addressCur = addr
-        mdc.currentBank = &m
-        return err
-        //return errors.New("ram not implemented in MDCart")
-    }
-    return nil
+	if reqbank == 0 {
+		var m MDRom
+		m.d = mdc.d
+		addr, err := m.d.Seek(0, io.SeekStart)
+		m.addressCur = addr
+		mdc.currentBank = &m
+		return err
+	}
+	if reqbank == 1 {
+		if !mdc.ramAvailable {
+			return errors.New("req ram, no ram")
+		}
+		var m MDRam
+		m.d = mdc.d
+		addr, err := m.d.Seek(0, io.SeekStart)
+		m.addressCur = addr
+		mdc.currentBank = &m
+		return err
+		//return errors.New("ram not implemented in MDCart")
+	}
+	return nil
 }
 
 ///////////////from cart.go
@@ -741,7 +743,7 @@ func (d *Fkmd) RamAvailable() bool {
 		err        error
 	)
 
-    d.RamEnable()
+	d.RamEnable()
 	first_word, err = d.ReadWord(RAM_ADDR)
 	d.WriteWord(RAM_ADDR, uint16(first_word^0xffff))
 	tmp, err = d.ReadWord(RAM_ADDR)
@@ -813,7 +815,7 @@ func checkRomSize(d *Fkmd, base_addr int64, max_len int64) int64 {
 	sector0 = make([]byte, 256)
 	sector = make([]byte, 256)
 
-    d.RamDisable()
+	d.RamDisable()
 	d.Seek(int64(base_addr), io.SeekStart)
 	d.Read(sector0)
 
@@ -843,8 +845,8 @@ func checkRomSize(d *Fkmd, base_addr int64, max_len int64) int64 {
 }
 
 // Should be called with RAM disabled, will return with RAM disabled and address
-// cursor inconsistent 
-func (d *Fkmd)GetRomSize() (romsize int64) {
+// cursor inconsistent
+func (d *Fkmd) GetRomSize() (romsize int64) {
 	var (
 		v            byte
 		i            int
@@ -855,11 +857,11 @@ func (d *Fkmd)GetRomSize() (romsize int64) {
 	var ram bool = false
 	var extra_rom bool = false
 
-    defer d.RamDisable()
+	defer d.RamDisable()
 	if d.RamAvailable() { //RAM enable
 		ram = true
 		extra_rom = true
-        d.RamDisable()
+		d.RamDisable()
 		d.Seek(RAM_ADDR, io.SeekStart)
 		d.Read(sector0)
 		d.Seek(RAM_ADDR, io.SeekStart)
@@ -872,8 +874,8 @@ func (d *Fkmd)GetRomSize() (romsize int64) {
 		if extra_rom == true {
 			extra_rom = false
 			d.Seek(RAM_ADDR+0x10000, io.SeekStart)
-			d.Read(sector)                //wtf? logic from original driver
-            d.RamEnable()
+			d.Read(sector) //wtf? logic from original driver
+			d.RamEnable()
 			d.Seek(RAM_ADDR, io.SeekStart)
 			d.Read(sector)
 			for i, v = range sector0 {

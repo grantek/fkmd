@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jacobsa/go-serial/serial"
 	"github.com/grantek/fkmd/cart"
+	"github.com/jacobsa/go-serial/serial"
 	//"github.com/grantek/fkmd/device"
 	"github.com/grantek/fkmd/krikzz_fkmd"
 )
@@ -102,7 +102,7 @@ func ReadRam(d *krikzz_fkmd.Fkmd, ramfile string, autoname bool) {
 		defer f.Close()
 	}
 
-    d.RamEnable()
+	d.RamEnable()
 	defer d.RamDisable()
 	d.Seek(0x200000, io.SeekStart)
 	buf := make([]byte, ramsize)
@@ -167,7 +167,7 @@ func WriteRam(d *krikzz_fkmd.Fkmd, ramfile string) error {
 		return errors.New(fmt.Sprintf("error: read data beyond %d bytes from ramfile \"%s\": %x", ramsize, ramfile, nextbyte[0]))
 	}
 
-    d.RamEnable()
+	d.RamEnable()
 	defer d.RamDisable()
 	d.Seek(0x200000, io.SeekStart)
 
@@ -452,5 +452,3 @@ func main() {
 		WriteRom(d, *romfile)
 	}
 }
-
-
