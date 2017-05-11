@@ -21,6 +21,8 @@ const (
 	PAR_INC    byte = 128
 
     WRITE_BLOCK_SIZE int64 = 65536
+
+    RAM_ADDR  int64 = 0x20000
 )
 
 type Fkmd struct {
@@ -225,7 +227,10 @@ func (d *Fkmd) ReadWord(addr int64) (uint16, error) {
 	val = uint16(buf[0]) << 8
 	val |= uint16(buf[1])
 
+    #asdf
+
 	return val, nil
+
 }
 
 // we can only write to the lower byte of a word-aligned address
@@ -406,6 +411,7 @@ func (d *Fkmd)RamDisable() error {
 type MDRom struct {
     d *Fkmd
     addressCur int64
+    size int64
 }
 
 func (m *MDRom)Read(p []byte) (n int, err error) {
@@ -505,7 +511,7 @@ func (m *MDRam) Seek(offset int64, whence int) (newoffset int64, err error) {
         offset = m.d.GetRamSize() - offset
 	}
 
-    newoffset, err = m.d.Seek(offset+0x20000, io.SeekStart)
+    newoffset, err = m.d.Seek(offset+RAM_ADDR, io.SeekStart)
     m.addressCur = newoffset
     return
 }
@@ -532,6 +538,7 @@ func (mdc *MDCart) GetCurrentBank() (*device.MemBank, error) {
     return mdc.currentBank, nil
 }
 
+//always explicitly seeks to 0
 func (mdc *MDCart) SwitchBank(reqbank int) error {
     if reqbank == 0 {
         var m MDRom
@@ -722,13 +729,13 @@ func (d *Fkmd) RamAvailable() bool {
 	)
 
     d.RamEnable()
-	first_word, err = d.ReadWord(0x200000)
-	d.WriteWord(0x200000, uint16(first_word^0xffff))
-	tmp, err = d.ReadWord(0x200000)
+	first_word, err = d.ReadWord(RAM_ADDR)
+	d.WriteWord(RAM_ADDR, uint16(first_word^0xffff))
+	tmp, err = d.ReadWord(RAM_ADDR)
 	if err != nil {
 		panic(err)
 	}
-	d.WriteWord(0x200000, first_word)
+	d.WriteWord(RAM_ADDR, first_word)
 	tmp ^= 0xffff
 	if (first_word & 0x00ff) != (tmp & 0x00ff) { //Save RAM is 8-bit so we don't care what the second byte of the word is
 		return false
@@ -755,17 +762,17 @@ func (d *Fkmd) GetRamSize() int64 {
 		return 0
 	}
 
-	first_word, err = d.ReadWord(0x200000)
+	first_word, err = d.ReadWord(RAM_ADDR)
 
 	for ram_size = 256; ram_size < 0x100000; ram_size *= 2 {
-		tmp, err = d.ReadWord(0x200000 + ram_size)
-		d.WriteWord(0x200000+ram_size, tmp^0xffff)
-		tmp2, err = d.ReadWord(0x200000 + ram_size)
-		first_word_tmp, err = d.ReadWord(0x200000)
+		tmp, err = d.ReadWord(RAM_ADDR + ram_size)
+		d.WriteWord(RAM_ADDR+ram_size, tmp^0xffff)
+		tmp2, err = d.ReadWord(RAM_ADDR + ram_size)
+		first_word_tmp, err = d.ReadWord(RAM_ADDR)
 		if err != nil {
 			panic(err)
 		}
-		d.WriteWord(0x200000+ram_size, tmp)
+		d.WriteWord(RAM_ADDR+ram_size, tmp)
 		tmp2 ^= 0xffff
 		if (tmp & 0xff) != (tmp2 & 0xff) {
 			break
@@ -840,9 +847,9 @@ func (d *Fkmd)GetRomSize() (romsize int64) {
 		ram = true
 		extra_rom = true
         d.RamDisable()
-		d.Seek(0x200000, io.SeekStart)
+		d.Seek(RAM_ADDR, io.SeekStart)
 		d.Read(sector0)
-		d.Seek(0x200000, io.SeekStart)
+		d.Seek(RAM_ADDR, io.SeekStart)
 		d.Read(sector)
 		for i, v = range sector0 {
 			if sector[i] != v {
@@ -851,10 +858,10 @@ func (d *Fkmd)GetRomSize() (romsize int64) {
 		}
 		if extra_rom == true {
 			extra_rom = false
-			d.Seek(0x200000+0x10000, io.SeekStart)
+			d.Seek(RAM_ADDR+0x10000, io.SeekStart)
 			d.Read(sector)                //wtf? logic from original driver
             d.RamEnable()
-			d.Seek(0x200000, io.SeekStart)
+			d.Seek(RAM_ADDR, io.SeekStart)
 			d.Read(sector)
 			for i, v = range sector0 {
 				if sector[i] != v {
