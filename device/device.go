@@ -27,5 +27,5 @@ type MemCart interface {
 
 type MemBank interface {
 	io.ReadWriteSeeker
-	//GetName() (string, error)
+	GetName() (string, error)
 }

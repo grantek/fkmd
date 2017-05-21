@@ -229,8 +229,6 @@ func (d *Fkmd) ReadWord(addr int64) (uint16, error) {
 	val = uint16(buf[0]) << 8
 	val |= uint16(buf[1])
 
-	//asdf
-
 	return val, nil
 
 }
@@ -284,8 +282,8 @@ func (d *Fkmd) Write(p []byte) (n int, err error) {
 
 	for req_len > 0 {
 		wr_len = req_len
-		if wr_len > 65536 {
-			wr_len = 65536
+		if wr_len > WRITE_BLOCK_SIZE {
+			wr_len = WRITE_BLOCK_SIZE
 		}
 		cmd := make([]byte, 5)
 		cmd[0] = CMD_LEN
@@ -451,19 +449,32 @@ func (m *MDRom) Seek(offset int64, whence int) (newoffset int64, err error) {
 }
 
 //should allow incremental writing, erasing pages as they're reached?
+//if not on a page boundary, assume the rest of the page has been erased
 func (m *MDRom) Write(p []byte) (n int, err error) {
 	var (
-		writelen int
+		writelen  int
+		chunksize int
 	)
 	writelen = len(p)
-	if int64(writelen)%WRITE_BLOCK_SIZE > 0 {
-		fmt.Println(fmt.Sprintf("Attempting to write less than %iKiB, flash erase will be larger than write", WRITE_BLOCK_SIZE/1024))
-	}
-	err = m.d.FlashWrite(p)
+	for n <= writelen {
+		chunksize = writelen - n
+		if chunksize > WRITE_BLOCK_SIZE {
+			chunksize = WRITE_BLOCK_SIZE
+		}
+		if m.addressCur%WRITE_BLOCK_SIZE == 0 {
+			md.d.FlashErase(m.addressCur)
+			md.d.Seek(m.addressCur)
+		}
+		chunksize = chunksize - m.addressCur%WRITE_BLOCK_SIZE
+		err = m.d.FlashWrite(p[n : n+chunksize])
 
-	if err != nil {
-		n = writelen
-		m.addressCur += int64(n)
+		if err != nil {
+			n += chunksize
+			m.addressCur += int64(n)
+		} else {
+			panic()
+		}
+
 	}
 
 	return
