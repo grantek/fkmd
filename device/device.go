@@ -21,7 +21,7 @@ import (
 
 type MemCart interface {
 	NumBanks() (int, error)
-	GetCurrentBank() (*MemBank, error)
+	GetCurrentBank() (MemBank, error)
 	SwitchBank(int) error
 }
 

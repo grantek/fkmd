@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"github.com/grantek/fkmd/cart"
-	"github.com/jacobsa/go-serial/serial"
-	//"github.com/grantek/fkmd/device"
+	"github.com/grantek/fkmd/device"
 	"github.com/grantek/fkmd/krikzz_fkmd"
+	"github.com/jacobsa/go-serial/serial"
 )
 
 func usage() {
@@ -24,6 +24,7 @@ func usage() {
 }
 
 //md specific
+/*
 func ReadRom(d *krikzz_fkmd.Fkmd, romfile string, autoname bool) {
 	var (
 		romname   string
@@ -65,6 +66,14 @@ func ReadRom(d *krikzz_fkmd.Fkmd, romfile string, autoname bool) {
 		}
 	}
 	fmt.Println()
+}
+*/
+
+func ReadRom(d *krikzz_fkmd.Fkmd, romfile string, autoname bool) {
+	if autoname {
+		romfile = "autoname"
+	}
+
 }
 
 func ReadRam(d *krikzz_fkmd.Fkmd, ramfile string, autoname bool) {
@@ -410,8 +419,9 @@ func main() {
 	}
 
 	var d = krikzz_fkmd.New()
+	var mdc device.MemCart
 	d.SetOptions(options)
-	err = d.Connect()
+	mdc, err = d.Connect()
 
 	if err != nil {
 		fmt.Println("Error opening serial port: ", err)
@@ -420,35 +430,40 @@ func main() {
 		defer d.Disconnect()
 	}
 
-	if *rominfo {
-		s, _ := cart.GetRomName(d)
-		fmt.Println("ROM name:", s)
-		fmt.Println("ROM size:", cart.GetRomSize(d))
-		ramsize := cart.GetRamSize(d)
-		if ramsize > 0 {
-			fmt.Println("RAM available: yes")
-			fmt.Println("RAM size:", ramsize)
-		} else {
-			fmt.Println("RAM available: no")
+	/*
+		if *rominfo {
+			s, _ := cart.GetRomName(d)
+			fmt.Println("ROM name:", s)
+			fmt.Println("ROM size:", cart.GetRomSize(d))
+			ramsize := cart.GetRamSize(d)
+			if ramsize > 0 {
+				fmt.Println("RAM available: yes")
+				fmt.Println("RAM size:", ramsize)
+			} else {
+				fmt.Println("RAM available: no")
+			}
 		}
-	}
 
-	if *readrom {
-		ReadRom(d, *romfile, *autoname)
-	}
-
-	if *readram {
-		ReadRam(d, *ramfile, *autoname)
-	}
-
-	if *writeram {
-		err = WriteRam(d, *ramfile)
-		if err != nil {
-			fmt.Println(err)
+		if *readrom {
+			ReadRom(d, *romfile, *autoname)
 		}
-	}
 
-	if *writerom {
-		WriteRom(d, *romfile)
-	}
+		if *readram {
+			ReadRam(d, *ramfile, *autoname)
+		}
+
+		if *writeram {
+			err = WriteRam(d, *ramfile)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+
+		if *writerom {
+			WriteRom(d, *romfile)
+		}
+	*/
+	var i int
+	i, _ = mdc.NumBanks()
+	fmt.Println(i)
 }

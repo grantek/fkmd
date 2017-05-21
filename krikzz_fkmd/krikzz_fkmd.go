@@ -39,11 +39,11 @@ func (d *Fkmd) SetOptions(options serial.OpenOptions) {
 	d.opt = options
 }
 
-func (d *Fkmd) Connect() error {
+func (d *Fkmd) Connect() (device.MemCart, error) {
 	f, err := serial.Open(d.opt)
 	d.fd = f
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	//my flashkit device ID is 257, which matches this logic
@@ -57,13 +57,15 @@ func (d *Fkmd) Connect() error {
 		f, err := serial.Open(d.opt)
 		d.fd = f
 		if err != nil {
-			return err
+			return nil, err
 		}
 		//need to redo GetID after reopen
 		_, err = d.GetID()
 		err = d.SetDelay(0)
 	}
-	return err
+	var mdc MDCart
+	mdc.d = d
+	return &mdc, err
 }
 
 func (d *Fkmd) Disconnect() error {
