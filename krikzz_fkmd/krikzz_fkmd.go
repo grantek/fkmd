@@ -282,8 +282,8 @@ func (d *Fkmd) Write(p []byte) (n int, err error) {
 
 	for req_len > 0 {
 		wr_len = req_len
-		if wr_len > WRITE_BLOCK_SIZE {
-			wr_len = WRITE_BLOCK_SIZE
+		if wr_len > int(WRITE_BLOCK_SIZE) {
+			wr_len = int(WRITE_BLOCK_SIZE)
 		}
 		cmd := make([]byte, 5)
 		cmd[0] = CMD_LEN
@@ -458,21 +458,21 @@ func (m *MDRom) Write(p []byte) (n int, err error) {
 	writelen = len(p)
 	for n <= writelen {
 		chunksize = writelen - n
-		if chunksize > WRITE_BLOCK_SIZE {
-			chunksize = WRITE_BLOCK_SIZE
+		if chunksize > int(WRITE_BLOCK_SIZE) {
+			chunksize = int(WRITE_BLOCK_SIZE)
 		}
 		if m.addressCur%WRITE_BLOCK_SIZE == 0 {
-			md.d.FlashErase(m.addressCur)
-			md.d.Seek(m.addressCur)
+			m.d.FlashErase(m.addressCur)
+			m.d.Seek(m.addressCur, io.SeekStart)
 		}
-		chunksize = chunksize - m.addressCur%WRITE_BLOCK_SIZE
+		chunksize = chunksize - int(m.addressCur%WRITE_BLOCK_SIZE)
 		err = m.d.FlashWrite(p[n : n+chunksize])
 
 		if err != nil {
 			n += chunksize
 			m.addressCur += int64(n)
 		} else {
-			panic()
+			panic("MDRom write error!")
 		}
 
 	}
