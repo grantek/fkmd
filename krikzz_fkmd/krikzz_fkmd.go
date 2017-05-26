@@ -65,6 +65,18 @@ func (d *Fkmd) Connect() (device.MemCart, error) {
 	}
 	var mdc MDCart
 	mdc.d = d
+	if d.RamAvailable() {
+		mdc.ramAvailable = true
+		var mdram MDRam
+		mdram.size = d.GetRamSize()
+		mdc.ramBank = &mdram
+	} else {
+		mdc.ramAvailable = false
+	}
+	var mdrom MDRom
+	mdrom.size = d.GetRomSize()
+	mdc.romBank = &mdrom
+	//currentBank
 	return &mdc, err
 }
 
@@ -429,18 +441,14 @@ func (m *MDRom) Read(p []byte) (n int, err error) {
 }
 
 func (m *MDRom) Seek(offset int64, whence int) (newoffset int64, err error) {
-	var (
-		romsize int64
-	)
 	switch whence {
 	case io.SeekCurrent:
 		offset += m.addressCur
 	case io.SeekEnd:
-		romsize = m.d.GetRomSize()
-		if offset > romsize {
-			return romsize - m.addressCur - 1, errors.New(fmt.Sprintf("Trying to seek %i from io.SeekEnd of ROM with detected length %i", offset, romsize))
+		if offset > m.size {
+			return m.size - m.addressCur - 1, errors.New(fmt.Sprintf("Trying to seek %i from io.SeekEnd of ROM with detected length %i", offset, m.size))
 		}
-		offset = m.d.GetRomSize() - offset
+		offset = m.size - offset
 	}
 
 	newoffset, err = m.d.Seek(offset, io.SeekStart)
@@ -486,8 +494,9 @@ func (m *MDRom) GetName() (string, error) {
 
 ///////////////mdram (MemBank)
 type MDRam struct {
-	d          *Fkmd
-	addressCur int64
+	d          *Fkmd //attached device
+	addressCur int64 //current address pointer
+	size       int64 //size in bytes
 }
 
 func (m *MDRam) Read(p []byte) (n int, err error) {
@@ -512,18 +521,14 @@ func (m *MDRam) Write(p []byte) (n int, err error) {
 }
 
 func (m *MDRam) Seek(offset int64, whence int) (newoffset int64, err error) {
-	var (
-		ramsize int64
-	)
 	switch whence {
 	case io.SeekCurrent:
 		offset += m.addressCur
 	case io.SeekEnd:
-		ramsize = m.d.GetRamSize()
-		if offset > ramsize {
-			return ramsize - m.addressCur - 1, errors.New(fmt.Sprintf("Trying to seek %i from io.SeekEnd of RAM with detected length %i", offset, ramsize))
+		if offset > m.size {
+			return m.size - m.addressCur - 1, errors.New(fmt.Sprintf("Trying to seek %i from io.SeekEnd of RAM with detected length %i", offset, m.size))
 		}
-		offset = m.d.GetRamSize() - offset
+		offset = m.size - offset
 	}
 
 	newoffset, err = m.d.Seek(offset+RAM_ADDR, io.SeekStart)
@@ -540,6 +545,8 @@ type MDCart struct {
 	d            *Fkmd
 	ramAvailable bool
 	currentBank  device.MemBank
+	romBank      device.MemBank
+	ramBank      device.MemBank
 }
 
 func (mdc *MDCart) NumBanks() (int, error) {
