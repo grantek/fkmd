@@ -430,8 +430,9 @@ func main() {
 		defer d.Disconnect()
 	}
 
-	/*
-		if *rominfo {
+	if *rominfo {
+		fmt.Println("Not implemented")
+		/*
 			s, _ := cart.GetRomName(d)
 			fmt.Println("ROM name:", s)
 			fmt.Println("ROM size:", cart.GetRomSize(d))
@@ -442,27 +443,95 @@ func main() {
 			} else {
 				fmt.Println("RAM available: no")
 			}
-		}
+		*/
+	}
 
-		if *readrom {
-			ReadRom(d, *romfile, *autoname)
-		}
+	var blocksize int64
+	var f *os.File
+	var n int
 
-		if *readram {
-			ReadRam(d, *ramfile, *autoname)
+	if *readrom {
+		if *romfile == "" {
+			*romfile = "rom.out"
 		}
-
-		if *writeram {
-			err = WriteRam(d, *ramfile)
+		if *romfile == "-" {
+			f = os.Stdout
+		} else {
+			f, err = os.Create(*romfile)
 			if err != nil {
 				fmt.Println(err)
+				return
 			}
 		}
 
-		if *writerom {
-			WriteRom(d, *romfile)
+		if f != os.Stdout {
+			fmt.Println("Opened", romfile, "for writing")
+			defer f.Close()
 		}
-	*/
+
+		mdc.SwitchBank(0)
+		var mdr device.MemBank
+		mdr, err = mdc.GetCurrentBank()
+
+		romsize := mdr.GetSize()
+		buf := make([]byte, blocksize)
+		for i := int64(0); i < romsize; i += blocksize {
+			d.Read(buf)
+			f.Write(buf)
+			if f != os.Stdout {
+				fmt.Printf(".")
+			}
+		}
+
+		fmt.Println()
+
+	}
+
+	if *readram {
+		if *romfile == "" {
+			*romfile = "rom.out"
+		}
+		if *romfile == "-" {
+			f = os.Stdout
+		} else {
+			f, err = os.Create(*romfile)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		}
+
+		if f != os.Stdout {
+			fmt.Println("Opened", romfile, "for writing")
+			defer f.Close()
+		}
+
+		mdc.SwitchBank(1)
+		mdr, err := mdc.GetCurrentBank()
+
+		ramsize := mdr.GetSize()
+		buf := make([]byte, ramsize)
+		bytesread := 0
+		for bytesread < int(ramsize) {
+			n, err = mdr.Read(buf)
+			bytesread += n
+			if err != nil || bytesread == 0 {
+				panic("short RAM read")
+			}
+		}
+
+		fmt.Println()
+
+	}
+
+	if *writeram {
+		fmt.Println("Not implemented")
+	}
+
+	if *writerom {
+		fmt.Println("Not implemented")
+	}
+
 	var i int
 	i, _ = mdc.NumBanks()
 	fmt.Println(i)
