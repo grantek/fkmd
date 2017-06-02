@@ -76,7 +76,7 @@ func (d *Fkmd) Connect() (device.MemCart, error) {
 	var mdrom MDRom
 	mdrom.size = d.GetRomSize()
 	mdc.romBank = &mdrom
-	//currentBank
+	mdc.SwitchBank(0)
 	return &mdc, err
 }
 
@@ -492,6 +492,10 @@ func (m *MDRom) GetName() (string, error) {
 	return "mdrom", nil
 }
 
+func (m *MDRom) GetSize() int64 {
+	return m.size
+}
+
 ///////////////mdram (MemBank)
 type MDRam struct {
 	d          *Fkmd //attached device
@@ -540,6 +544,10 @@ func (m *MDRam) GetName() (string, error) {
 	return "mdram", nil
 }
 
+func (m *MDRam) GetSize() int64 {
+	return m.size
+}
+
 ///////////////mdcart (MemCart)
 type MDCart struct {
 	d            *Fkmd
@@ -563,26 +571,27 @@ func (mdc *MDCart) GetCurrentBank() (device.MemBank, error) {
 //always explicitly seeks to 0
 func (mdc *MDCart) SwitchBank(reqbank int) error {
 	if reqbank == 0 {
-		var m MDRom
-		m.d = mdc.d
-		addr, err := m.d.Seek(0, io.SeekStart)
-		m.addressCur = addr
-		mdc.currentBank = &m
-		return err
+		if mdc.romBank == nil {
+			return errors.New("ROM not initialised")
+		}
+		mdc.d.RamDisable()
+		mdc.currentBank = mdc.romBank
+		mdc.currentBank.Seek(0, io.SeekStart)
+		return nil
 	}
 	if reqbank == 1 {
 		if !mdc.ramAvailable {
-			return errors.New("req ram, no ram")
+			return errors.New("RAM bank requested but not detected on cartridge")
 		}
-		var m MDRam
-		m.d = mdc.d
-		addr, err := m.d.Seek(0, io.SeekStart)
-		m.addressCur = addr
-		mdc.currentBank = &m
-		return err
-		//return errors.New("ram not implemented in MDCart")
+		if mdc.ramBank == nil {
+			return errors.New("RAM marked as available on cart but bank not initialised")
+		}
+		mdc.d.RamEnable()
+		mdc.currentBank = mdc.ramBank
+		mdc.currentBank.Seek(0, io.SeekStart)
+		return nil
 	}
-	return nil
+	return errors.New(fmt.Sprintf("Bank %i out of range 0-1", reqbank))
 }
 
 ///////////////from cart.go

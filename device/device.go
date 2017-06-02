@@ -28,4 +28,5 @@ type MemCart interface {
 type MemBank interface {
 	io.ReadWriteSeeker
 	GetName() (string, error)
+	GetSize() int64
 }
