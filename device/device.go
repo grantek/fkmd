@@ -20,13 +20,13 @@ import (
 //}
 
 type MemCart interface {
-	NumBanks() (int, error)
-	GetCurrentBank() (MemBank, error)
+	NumBanks() int
+	GetCurrentBank() MemBank
 	SwitchBank(int) error
 }
 
 type MemBank interface {
 	io.ReadWriteSeeker
-	GetName() (string, error)
+	GetName() string
 	GetSize() int64
 }

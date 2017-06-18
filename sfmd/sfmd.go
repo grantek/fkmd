@@ -430,27 +430,31 @@ func main() {
 		defer d.Disconnect()
 	}
 
-	if *rominfo {
-		fmt.Println("Not implemented")
-		/*
-			s, _ := cart.GetRomName(d)
-			fmt.Println("ROM name:", s)
-			fmt.Println("ROM size:", cart.GetRomSize(d))
-			ramsize := cart.GetRamSize(d)
-			if ramsize > 0 {
-				fmt.Println("RAM available: yes")
-				fmt.Println("RAM size:", ramsize)
-			} else {
-				fmt.Println("RAM available: no")
-			}
-		*/
-	}
-
 	var blocksize int64
 	var f *os.File
 	var n int
+	var mdr device.MemBank
+
+	if *rominfo {
+		numbanks := mdc.NumBanks()
+		fmt.Println("Banks: %i", numbanks+1)
+		for i := 0; i <= numbanks; i++ {
+			mdc.SwitchBank(i)
+			name := mdr.GetName()
+			size := mdr.GetSize()
+			mdr = mdc.GetCurrentBank()
+			fmt.Println("Bank %i: \"%s\" %i", i, name, size)
+		}
+	}
 
 	if *readrom {
+		mdc.SwitchBank(0)
+		mdr = mdc.GetCurrentBank()
+
+		if err != nil {
+			panic(err)
+		}
+
 		if *romfile == "" {
 			*romfile = "rom.out"
 		}
@@ -468,10 +472,6 @@ func main() {
 			fmt.Println("Opened", romfile, "for writing")
 			defer f.Close()
 		}
-
-		mdc.SwitchBank(0)
-		var mdr device.MemBank
-		mdr, err = mdc.GetCurrentBank()
 
 		romsize := mdr.GetSize()
 		buf := make([]byte, blocksize)
@@ -488,6 +488,13 @@ func main() {
 	}
 
 	if *readram {
+		mdc.SwitchBank(1)
+		mdr := mdc.GetCurrentBank()
+
+		if err != nil {
+			panic(err)
+		}
+
 		if *romfile == "" {
 			*romfile = "rom.out"
 		}
@@ -496,8 +503,7 @@ func main() {
 		} else {
 			f, err = os.Create(*romfile)
 			if err != nil {
-				fmt.Println(err)
-				return
+				panic(err)
 			}
 		}
 
@@ -505,9 +511,6 @@ func main() {
 			fmt.Println("Opened", romfile, "for writing")
 			defer f.Close()
 		}
-
-		mdc.SwitchBank(1)
-		mdr, err := mdc.GetCurrentBank()
 
 		ramsize := mdr.GetSize()
 		buf := make([]byte, ramsize)
@@ -533,6 +536,6 @@ func main() {
 	}
 
 	var i int
-	i, _ = mdc.NumBanks()
+	i = mdc.NumBanks()
 	fmt.Println(i)
 }

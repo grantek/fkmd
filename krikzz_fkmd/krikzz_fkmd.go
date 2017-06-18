@@ -488,8 +488,8 @@ func (m *MDRom) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (m *MDRom) GetName() (string, error) {
-	return "mdrom", nil
+func (m *MDRom) GetName() string {
+	return "mdrom"
 }
 
 func (m *MDRom) GetSize() int64 {
@@ -540,8 +540,8 @@ func (m *MDRam) Seek(offset int64, whence int) (newoffset int64, err error) {
 	return
 }
 
-func (m *MDRam) GetName() (string, error) {
-	return "mdram", nil
+func (m *MDRam) GetName() string {
+	return "mdram"
 }
 
 func (m *MDRam) GetSize() int64 {
@@ -557,15 +557,17 @@ type MDCart struct {
 	ramBank      device.MemBank
 }
 
-func (mdc *MDCart) NumBanks() (int, error) {
+func (mdc *MDCart) NumBanks() int {
 	if mdc.ramAvailable {
-		return 2, nil
+		return 2
+	} else {
+		return 1
 	}
-	return 1, nil
+	return 0
 }
 
-func (mdc *MDCart) GetCurrentBank() (device.MemBank, error) {
-	return mdc.currentBank, nil
+func (mdc *MDCart) GetCurrentBank() device.MemBank {
+	return mdc.currentBank
 }
 
 //always explicitly seeks to 0
