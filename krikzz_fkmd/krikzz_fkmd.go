@@ -69,12 +69,14 @@ func (d *Fkmd) Connect() (device.MemCart, error) {
 		mdc.ramAvailable = true
 		var mdram MDRam
 		mdram.size = d.GetRamSize()
+		mdram.d = d
 		mdc.ramBank = &mdram
 	} else {
 		mdc.ramAvailable = false
 	}
 	var mdrom MDRom
 	mdrom.size = d.GetRomSize()
+	mdrom.d = d
 	mdc.romBank = &mdrom
 	mdc.SwitchBank(0)
 	return &mdc, err
@@ -144,9 +146,9 @@ func (d *Fkmd) Seek(offset int64, whence int) (int64, error) {
 	buf[4] = CMD_ADDR
 	buf[5] = (byte)(addr)
 
-	d.fd.Write(buf)
+	_, err := d.fd.Write(buf)
 
-	return offset, nil
+	return offset, err
 }
 
 //odd offset OR len(p) will break these functions

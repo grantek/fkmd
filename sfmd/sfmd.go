@@ -437,13 +437,13 @@ func main() {
 
 	if *rominfo {
 		numbanks := mdc.NumBanks()
-		fmt.Println("Banks: %i", numbanks+1)
-		for i := 0; i <= numbanks; i++ {
+		fmt.Printf("Banks: %d\n", numbanks)
+		for i := 0; i < numbanks; i++ {
 			mdc.SwitchBank(i)
+			mdr = mdc.GetCurrentBank()
 			name := mdr.GetName()
 			size := mdr.GetSize()
-			mdr = mdc.GetCurrentBank()
-			fmt.Println("Bank %i: \"%s\" %i", i, name, size)
+			fmt.Printf("Bank %d: \"%s\" %d", i, name, size)
 		}
 	}
 
