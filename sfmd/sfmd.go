@@ -430,7 +430,7 @@ func main() {
 		defer d.Disconnect()
 	}
 
-	var blocksize int64
+	var blocksize int64 = 32768
 	var f *os.File
 	var n int
 	var mdr device.MemBank
