@@ -521,8 +521,14 @@ func (m *MDRam) Read(p []byte) (n int, err error) {
 }
 
 func (m *MDRam) Write(p []byte) (n int, err error) {
-	n, err = m.d.Write(p)
-	m.addressCur += int64(n)
+	writelen := len(p)
+	if m.addressCur+int64(n) > m.size {
+		writelen = int(m.size - m.addressCur)
+	}
+	if writelen > 0 {
+		n, err = m.d.Write(p)
+		m.addressCur += int64(n)
+	}
 	return
 }
 

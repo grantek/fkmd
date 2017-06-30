@@ -8,8 +8,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"regexp"
-	"strings"
+	//	"regexp"
+	//	"strings"
 
 	"github.com/grantek/fkmd/cart"
 	"github.com/grantek/fkmd/device"
@@ -24,51 +24,6 @@ func usage() {
 }
 
 //md specific
-/*
-func ReadRom(d *krikzz_fkmd.Fkmd, romfile string, autoname bool) {
-	var (
-		romname   string
-		romsize   int
-		blocksize int = 32768
-		f         *os.File
-		err       error
-	)
-	if autoname {
-		romname, _ = cart.GetRomName(d)
-		re := regexp.MustCompile("  *")
-		romname = re.ReplaceAllString(romname, " ")
-		romname = strings.Title(strings.ToLower(strings.TrimSpace(romname)))
-		romfile = fmt.Sprintf("%s.bin", romname)
-	}
-	if romfile == "-" {
-		f = os.Stdout
-	} else {
-		f, err = os.Create(romfile)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-	}
-
-	if f != os.Stdout {
-		fmt.Println("Opened", romfile, "for writing")
-		defer f.Close()
-	}
-
-	romsize = cart.GetRomSize(d)
-	d.Seek(0, io.SeekStart)
-	buf := make([]byte, blocksize)
-	for i := 0; i < romsize; i += blocksize {
-		d.Read(buf)
-		f.Write(buf)
-		if f != os.Stdout {
-			fmt.Printf(".")
-		}
-	}
-	fmt.Println()
-}
-*/
-
 func ReadRom(d *krikzz_fkmd.Fkmd, romfile string, autoname bool) {
 	if autoname {
 		romfile = "autoname"
@@ -76,62 +31,7 @@ func ReadRom(d *krikzz_fkmd.Fkmd, romfile string, autoname bool) {
 
 }
 
-func ReadRam(d *krikzz_fkmd.Fkmd, ramfile string, autoname bool) {
-	var (
-		romname string
-		ramsize int
-		f       *os.File
-		err     error
-		n       int
-	)
-	ramsize = cart.GetRamSize(d)
-	if ramsize == 0 {
-		fmt.Println("RAM not detected for reading")
-		return
-	}
-	if autoname {
-		romname, _ = cart.GetRomName(d)
-		re := regexp.MustCompile("  *")
-		romname = re.ReplaceAllString(romname, " ")
-		romname = strings.Title(strings.ToLower(strings.TrimSpace(romname)))
-		ramfile = fmt.Sprintf("%s.srm", romname)
-	}
-	if ramfile == "-" {
-		f = os.Stdout
-	} else {
-		f, err = os.Create(ramfile)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-	}
-
-	if f != os.Stdout {
-		fmt.Println("Opened", ramfile, "for writing")
-		defer f.Close()
-	}
-
-	d.RamEnable()
-	defer d.RamDisable()
-	d.Seek(0x200000, io.SeekStart)
-	buf := make([]byte, ramsize)
-
-	n, err = d.Read(buf)
-	if n < ramsize {
-		panic(errors.New("short RAM read"))
-	}
-	if err != nil {
-		panic(err)
-	}
-	f.Write(buf)
-	if err != nil {
-		panic(err)
-	}
-	if f != os.Stdout {
-		fmt.Println("OK")
-	}
-}
-
+/*
 func WriteRam(d *krikzz_fkmd.Fkmd, ramfile string) error {
 	var (
 		ramsize int
@@ -201,6 +101,56 @@ func WriteRam(d *krikzz_fkmd.Fkmd, ramfile string) error {
 	}
 	fmt.Println("ok")
 	return nil
+}
+*/
+func WriteRam(mdc device.MemCart, ramfile string) {
+	var (
+		f         *os.File
+		n         int
+		ram, ram2 []byte
+		err       error
+	)
+	if mdc.NumBanks() < 2 {
+		panic("RAM not detected on cartridge for writing")
+	}
+	mdc.SwitchBank(1)
+	mdr := mdc.GetCurrentBank()
+
+	if ramfile == "-" {
+		f = os.Stdin
+	} else {
+		f, err = os.Open(ramfile)
+		if err != nil {
+			panic(err)
+		}
+	}
+	if f != os.Stdin {
+		fmt.Println("Opened", ramfile, "for reading")
+		defer f.Close()
+	}
+	ram, err = ioutil.ReadAll(f)
+	if err != nil {
+		panic(err)
+	}
+	n, err = mdr.Write(ram)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Wrote %d bytes", n)
+	if n < len(ram) {
+		fmt.Printf("WARNING: wrote %d bytes, input is %d bytes.\n", n, len(ram))
+	}
+	if int64(n) < mdr.GetSize() {
+		fmt.Printf("WARNING: wrote %d bytes, cartridge RAM is %d bytes.\n", n, len(ram))
+	}
+	fmt.Println("Verify...")
+	mdr.Seek(0, io.SeekStart)
+	for i := 0; i < n; i++ {
+		if ram[i] != ram2[i] {
+			panic(fmt.Sprintf("Failed verification at byte %d", i))
+		}
+	}
+	fmt.Printf("Verified %d bytes", n)
 }
 
 func WriteRom(d *krikzz_fkmd.Fkmd, romfile string) error {
@@ -528,7 +478,7 @@ func main() {
 	}
 
 	if *writeram {
-		fmt.Println("Not implemented")
+		WriteRam(mdc, *ramfile)
 	}
 
 	if *writerom {
