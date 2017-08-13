@@ -31,78 +31,56 @@ func ReadRom(d *krikzz_fkmd.Fkmd, romfile string, autoname bool) {
 
 }
 
-/*
-func WriteRam(d *krikzz_fkmd.Fkmd, ramfile string) error {
+func ReadRam(mdc device.MemCart, ramfile string, autoname bool) {
 	var (
-		ramsize int
-		f       *os.File
-		i, j, n int
-		err     error
-		v       byte
+		err error
+		f   *os.File
 	)
 
-	ramsize = cart.GetRamSize(d)
-	if ramsize == 0 {
-		return errors.New("RAM not detected for writing")
+	mdc.SwitchBank(1)
+	mdr := mdc.GetCurrentBank()
+
+	if err != nil {
+		panic(err)
 	}
-	if ramfile == "-" {
-		f = os.Stdin
+
+	if *ramfile == "" {
+		*ramfile = "ram.out"
+	}
+	if *ramfile == "-" {
+		f = os.Stdout
 	} else {
-		f, err = os.Open(ramfile)
+		f, err = os.Create(*ramfile)
 		if err != nil {
-			return err
+			panic(err)
 		}
 	}
 
-	if f != os.Stdin {
-		fmt.Println("Opened", ramfile, "for reading")
+	if f != os.Stdout {
+		fmt.Println("Opened", ramfile, "for writing")
 		defer f.Close()
 	}
 
+	ramsize := mdr.GetSize()
 	buf := make([]byte, ramsize)
-	nextbyte := make([]byte, 1)
-	for i = 0; i < ramsize; {
-		j, err = f.Read(buf)
-		i += j
-		if err != nil {
-			return err
+	bytesread := 0
+	for bytesread < int(ramsize) {
+		n, err = mdr.Read(buf[bytesread:])
+		bytesread += n
+		if err != nil || bytesread == 0 {
+			panic("short RAM read")
 		}
-		if j == 0 {
-			return errors.New(fmt.Sprintf("error: read %d bytes from ramfile \"%s\", need %d", i, ramfile, ramsize))
-		}
-	}
-	j, err = f.Read(nextbyte)
-	if err == nil || j > 0 {
-		return errors.New(fmt.Sprintf("error: read data beyond %d bytes from ramfile \"%s\": %x", ramsize, ramfile, nextbyte[0]))
 	}
 
-	d.RamEnable()
-	defer d.RamDisable()
-	d.Seek(0x200000, io.SeekStart)
+	f.Write(buf)
 
-	n, err = d.Write(buf)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Verify...")
-	buf2 := make([]byte, ramsize)
-	d.Seek(0x200000, io.SeekStart)
-	n, err = d.Read(buf2)
-	if n < ramsize {
-		panic(errors.New("short RAM read"))
-	}
-	if err != nil {
-		panic(err)
-	}
-	for i, v = range buf {
-		if buf2[i] != v {
-			return errors.New(fmt.Sprintf("Failed verification at byte %d", i))
-		}
-	}
-	fmt.Println("ok")
-	return nil
+	fmt.Println()
 }
-*/
+
+func WriteRom(mdc device.MemCart, romfile string) {
+	fmt.Println("Not implemented")
+}
+
 func WriteRam(mdc device.MemCart, ramfile string) {
 	var (
 		f         *os.File
@@ -153,7 +131,7 @@ func WriteRam(mdc device.MemCart, ramfile string) {
 	fmt.Printf("Verified %d bytes", n)
 }
 
-func WriteRom(d *krikzz_fkmd.Fkmd, romfile string) error {
+func WriteRom(mdc device.MemCart, romfile string) error {
 	var (
 		romsize  int64
 		blocklen int64 = 4096
@@ -193,39 +171,31 @@ func WriteRom(d *krikzz_fkmd.Fkmd, romfile string) error {
 	}
 
 	if romsize > cart.MAX_ROM_SIZE {
-		fmt.Printf("Warning: Max ROM data size is %x cropping input\n", cart.MAX_ROM_SIZE, romsize)
+		fmt.Printf("Warning: Max ROM data size is %x, cropping input\n", cart.MAX_ROM_SIZE, romsize)
 		romsize = cart.MAX_ROM_SIZE
 	}
 
 	fblen = romsize
 	if romsize < 0x8000 {
-		return errors.New("Error: file size < 32KiB, pad with zeroes if required")
+		return errors.New("Error: file size < 32KiB, pad with 0xFF if required")
 	}
 
 	if romsize%0x10000 != 0 {
 		romsize = (romsize/0x10000)*0x10000 + 0x10000
 	}
 
-	fmt.Println("Flash erase...")
-	d.FlashResetBypass()
+	mdc.SwitchBank(0)
+	mdr := mdc.GetCurrentBank()
 
-	for i = 0; i < romsize; i += 65536 {
-		d.FlashErase(i)
-		fmt.Printf("*")
-	}
-	fmt.Printf("\n")
-
-	d.FlashUnlockBypass()
-	d.Seek(0, io.SeekStart)
+	//Going to rely on Write() performing block erasure
 	fmt.Println("Flash write...")
 	for i = 0; i < fblen; i += blocklen {
 		if i+blocklen > fblen {
 			blocklen = fblen - i
 		}
-		d.FlashWrite(filebuf[i : i+blocklen])
+		mdr.Write(filebuf[i : i+blocklen])
 		fmt.Printf("*")
 	}
-	d.FlashResetBypass()
 	fmt.Printf("\n")
 
 	fmt.Println("Flash verify...")
@@ -250,6 +220,19 @@ func WriteRom(d *krikzz_fkmd.Fkmd, romfile string) error {
 	fmt.Println("OK")
 	return nil
 }
+
+/* Erase code:
+d.FlashResetBypass()
+
+for i = 0; i < romsize; i += 65536 {
+	d.FlashErase(i)
+	fmt.Printf("*")
+}
+fmt.Printf("\n")
+
+d.FlashUnlockBypass()
+
+*/
 
 func main() {
 	var (
@@ -309,21 +292,6 @@ func main() {
 		fmt.Println("Must specify port")
 		usage()
 	}
-
-	/*
-		if *even && *odd {
-			fmt.Println("can't specify both even and odd parity")
-			usage()
-		}
-
-		parity := serial.PARITY_NONE
-
-		if *even {
-			parity = serial.PARITY_EVEN
-		} else if *odd {
-			parity = serial.PARITY_ODD
-		}
-	*/
 
 	if *readram && *writeram {
 		fmt.Println("Can't read and write cartridge RAM in one invocation")
@@ -438,51 +406,18 @@ func main() {
 	}
 
 	if *readram {
-		mdc.SwitchBank(1)
-		mdr := mdc.GetCurrentBank()
-
-		if err != nil {
-			panic(err)
-		}
-
-		if *romfile == "" {
-			*romfile = "rom.out"
-		}
-		if *romfile == "-" {
-			f = os.Stdout
-		} else {
-			f, err = os.Create(*romfile)
-			if err != nil {
-				panic(err)
-			}
-		}
-
-		if f != os.Stdout {
-			fmt.Println("Opened", romfile, "for writing")
-			defer f.Close()
-		}
-
-		ramsize := mdr.GetSize()
-		buf := make([]byte, ramsize)
-		bytesread := 0
-		for bytesread < int(ramsize) {
-			n, err = mdr.Read(buf)
-			bytesread += n
-			if err != nil || bytesread == 0 {
-				panic("short RAM read")
-			}
-		}
-
-		fmt.Println()
-
+		ReadRam(mdc, *ramfile, *autoname)
 	}
 
 	if *writeram {
 		WriteRam(mdc, *ramfile)
 	}
 
+	if *readrom {
+		ReadRom(mdc, *romfile, *autoname)
+	}
 	if *writerom {
-		fmt.Println("Not implemented")
+		WriteRom(mdc, *romfile)
 	}
 
 	var i int
