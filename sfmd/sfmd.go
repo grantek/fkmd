@@ -24,10 +24,11 @@ func usage() {
 }
 
 //md specific
-func ReadRom(d *krikzz_fkmd.Fkmd, romfile string, autoname bool) {
+func ReadRom(mdc device.MemCart, romfile string, autoname bool) {
 	if autoname {
 		romfile = "autoname"
 	}
+	fmt.Println("Not Implemented")
 
 }
 
@@ -35,6 +36,7 @@ func ReadRam(mdc device.MemCart, ramfile string, autoname bool) {
 	var (
 		err error
 		f   *os.File
+		n   int
 	)
 
 	mdc.SwitchBank(1)
@@ -44,13 +46,13 @@ func ReadRam(mdc device.MemCart, ramfile string, autoname bool) {
 		panic(err)
 	}
 
-	if *ramfile == "" {
-		*ramfile = "ram.out"
+	if ramfile == "" {
+		ramfile = "ram.out"
 	}
-	if *ramfile == "-" {
+	if ramfile == "-" {
 		f = os.Stdout
 	} else {
-		f, err = os.Create(*ramfile)
+		f, err = os.Create(ramfile)
 		if err != nil {
 			panic(err)
 		}
@@ -75,10 +77,6 @@ func ReadRam(mdc device.MemCart, ramfile string, autoname bool) {
 	f.Write(buf)
 
 	fmt.Println()
-}
-
-func WriteRom(mdc device.MemCart, romfile string) {
-	fmt.Println("Not implemented")
 }
 
 func WriteRam(mdc device.MemCart, ramfile string) {
@@ -201,12 +199,12 @@ func WriteRom(mdc device.MemCart, romfile string) error {
 	fmt.Println("Flash verify...")
 	rom2 := make([]byte, romsize)
 
-	d.Seek(0, io.SeekStart)
+	mdr.Seek(0, io.SeekStart)
 	for i = 0; i < fblen; i += blocklen {
 		if i+blocklen > fblen {
 			blocklen = fblen - i
 		}
-		d.Read(rom2[i : i+blocklen])
+		mdr.Read(rom2[i : i+blocklen])
 		fmt.Printf(".")
 	}
 	fmt.Printf("\n")
@@ -350,7 +348,6 @@ func main() {
 
 	var blocksize int64 = 32768
 	var f *os.File
-	var n int
 	var mdr device.MemBank
 
 	if *rominfo {
