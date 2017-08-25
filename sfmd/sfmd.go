@@ -8,8 +8,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	//	"regexp"
-	//	"strings"
+	"regexp"
+	"strings"
 
 	"github.com/grantek/fkmd/cart"
 	"github.com/grantek/fkmd/device"
@@ -25,11 +25,56 @@ func usage() {
 
 //md specific
 func ReadRom(mdc device.MemCart, romfile string, autoname bool) {
+	var (
+		romname   string
+		romsize   int64
+		blocksize int64 = 32768
+		f         *os.File
+		err       error
+		mdr       device.MemBank
+	)
 	if autoname {
-		romfile = "autoname"
+		romname, err = cart.GetRomName(mdc)
+		if err != nil {
+			panic(err)
+		}
+		re := regexp.MustCompile("  *")
+		romname = re.ReplaceAllString(romname, " ")
+		romname = strings.Title(strings.ToLower(strings.TrimSpace(romname)))
+		romfile = fmt.Sprintf("%s.bin", romname)
 	}
-	fmt.Println("Not Implemented")
 
+	err = mdc.SwitchBank(0)
+	if err != nil {
+		panic(err)
+	}
+	mdr = mdc.GetCurrentBank()
+	if romfile == "-" {
+		f = os.Stdout
+	} else {
+		f, err = os.Create(romfile)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
+
+	if f != os.Stdout {
+		fmt.Println("Opened", romfile, "for writing")
+		defer f.Close()
+	}
+
+	romsize = mdr.GetSize()
+	mdr.Seek(0, io.SeekStart)
+	buf := make([]byte, blocksize)
+	for i := int64(0); i < romsize; i += blocksize {
+		mdr.Read(buf)
+		f.Write(buf)
+		if f != os.Stdout {
+			fmt.Printf(".")
+		}
+	}
+	fmt.Println()
 }
 
 func ReadRam(mdc device.MemCart, ramfile string, autoname bool) {
@@ -346,61 +391,61 @@ func main() {
 		defer d.Disconnect()
 	}
 
-	var blocksize int64 = 32768
-	var f *os.File
-	var mdr device.MemBank
+	/*
+		var mdr device.MemBank
 
-	if *rominfo {
-		numbanks := mdc.NumBanks()
-		fmt.Printf("Banks: %d\n", numbanks)
-		for i := 0; i < numbanks; i++ {
-			mdc.SwitchBank(i)
+		if *rominfo {
+			numbanks := mdc.NumBanks()
+			fmt.Printf("Banks: %d\n", numbanks)
+			for i := 0; i < numbanks; i++ {
+				mdc.SwitchBank(i)
+				mdr = mdc.GetCurrentBank()
+				name := mdr.GetName()
+				size := mdr.GetSize()
+				fmt.Printf("Bank %d: \"%s\" %d", i, name, size)
+			}
+		}
+	*/
+	/*
+		if *readrom {
+			mdc.SwitchBank(0)
 			mdr = mdc.GetCurrentBank()
-			name := mdr.GetName()
-			size := mdr.GetSize()
-			fmt.Printf("Bank %d: \"%s\" %d", i, name, size)
-		}
-	}
 
-	if *readrom {
-		mdc.SwitchBank(0)
-		mdr = mdc.GetCurrentBank()
-
-		if err != nil {
-			panic(err)
-		}
-
-		if *romfile == "" {
-			*romfile = "rom.out"
-		}
-		if *romfile == "-" {
-			f = os.Stdout
-		} else {
-			f, err = os.Create(*romfile)
 			if err != nil {
-				fmt.Println(err)
-				return
+				panic(err)
 			}
-		}
 
-		if f != os.Stdout {
-			fmt.Println("Opened", romfile, "for writing")
-			defer f.Close()
-		}
+			if *romfile == "" {
+				*romfile = "rom.out"
+			}
+			if *romfile == "-" {
+				f = os.Stdout
+			} else {
+				f, err = os.Create(*romfile)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+			}
 
-		romsize := mdr.GetSize()
-		buf := make([]byte, blocksize)
-		for i := int64(0); i < romsize; i += blocksize {
-			d.Read(buf)
-			f.Write(buf)
 			if f != os.Stdout {
-				fmt.Printf(".")
+				fmt.Println("Opened", romfile, "for writing")
+				defer f.Close()
 			}
-		}
 
-		fmt.Println()
+			romsize := mdr.GetSize()
+			buf := make([]byte, blocksize)
+			for i := int64(0); i < romsize; i += blocksize {
+				d.Read(buf)
+				f.Write(buf)
+				if f != os.Stdout {
+					fmt.Printf(".")
+				}
+			}
 
-	}
+			fmt.Println()
+
+		}*/
 
 	if *readram {
 		ReadRam(mdc, *ramfile, *autoname)

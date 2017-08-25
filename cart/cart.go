@@ -5,6 +5,7 @@ package cart
 import (
 	"errors"
 	"fmt"
+	"github.com/grantek/fkmd/device"
 	"github.com/grantek/fkmd/krikzz_fkmd"
 	"io"
 )
@@ -22,6 +23,9 @@ const (
 )
 
 func GetRomRegion(rom_hdr []byte) string {
+	if len(rom_hdr) < 0x1f2 {
+		return "X"
+	}
 	val := rom_hdr[0x1f0]
 	if val != rom_hdr[0x1f1] && rom_hdr[0x1f1] != 0x20 && rom_hdr[0x1f1] != 0 {
 		return "W"
@@ -66,7 +70,7 @@ func GetRomRegion(rom_hdr []byte) string {
 	return "X"
 }
 
-func GetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
+func OldGetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
 	var (
 		n          int
 		err        error
@@ -83,6 +87,53 @@ func GetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
 		return "", err
 	}
 
+	namestring, err = searchRomName(buf[0x120:])
+	if err != nil {
+		namestring, err = searchRomName(buf[0x150:])
+	}
+
+	if err != nil {
+		namestring = "Unknown"
+	}
+
+	namestring = (fmt.Sprintf("%s (%s)", namestring, GetRomRegion(buf)))
+
+	return namestring, nil
+}
+
+func GetRomName(mdc device.MemCart) (string, error) {
+	var (
+		n   int
+		err error
+		mdr device.MemBank
+	)
+	err = mdc.SwitchBank(0)
+	if err != nil {
+		return "", err
+	}
+
+	mdr = mdc.GetCurrentBank()
+	mdr.Seek(0, io.SeekStart)
+	buf := make([]byte, 512)
+	n, err = mdr.Read(buf)
+	if n < 512 {
+		return "", errors.New("short read")
+	}
+	if err != nil {
+		return "", err
+	}
+
+	return GetRomNameFromHeader(buf)
+}
+
+func GetRomNameFromHeader(buf []byte) (string, error) {
+	var (
+		namestring string
+		err        error
+	)
+	if len(buf) < 512 {
+		return "", errors.New(fmt.Sprintf("Short ROM header, expected 512, got %d", len(buf)))
+	}
 	namestring, err = searchRomName(buf[0x120:])
 	if err != nil {
 		namestring, err = searchRomName(buf[0x150:])
