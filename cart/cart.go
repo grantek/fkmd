@@ -70,7 +70,7 @@ func GetRomRegion(rom_hdr []byte) string {
 	return "X"
 }
 
-func OldGetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
+func GetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
 	var (
 		n          int
 		err        error
@@ -101,7 +101,7 @@ func OldGetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
 	return namestring, nil
 }
 
-func GetRomName(mdc device.MemCart) (string, error) {
+func NewGetRomName(mdc device.MemCart) (string, error) {
 	var (
 		n   int
 		err error

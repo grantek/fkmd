@@ -11,9 +11,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/grantek/fkmd/cart"
 	"github.com/grantek/fkmd/device"
 	"github.com/grantek/fkmd/krikzz_fkmd"
+	"github.com/grantek/fkmd/mdcart"
 	"github.com/jacobsa/go-serial/serial"
 )
 
@@ -34,7 +34,7 @@ func ReadRom(mdc device.MemCart, romfile string, autoname bool) {
 		mdr       device.MemBank
 	)
 	if autoname {
-		romname, err = cart.GetRomName(mdc)
+		romname, err = mdcart.GetRomName(mdc)
 		if err != nil {
 			panic(err)
 		}
@@ -82,13 +82,17 @@ func ReadRam(mdc device.MemCart, ramfile string, autoname bool) {
 		err error
 		f   *os.File
 		n   int
+		mdr device.MemBank
 	)
 
-	mdc.SwitchBank(1)
-	mdr := mdc.GetCurrentBank()
-
+	err = mdc.SwitchBank(1)
 	if err != nil {
 		panic(err)
+	}
+
+	mdr = mdc.GetCurrentBank()
+	if mdr == nil {
+		panic("Current Bank is nil")
 	}
 
 	if ramfile == "" {
@@ -208,14 +212,14 @@ func WriteRom(mdc device.MemCart, romfile string) error {
 
 	fmt.Printf("Read %d bytes from %s\n", romsize, romfile)
 	if romsize%2 == 1 {
-		fmt.Printf("Warning: file size in bytes is odd\n", cart.MAX_ROM_SIZE, romsize)
+		fmt.Printf("Warning: file size in bytes is odd\n", mdcart.MAX_ROM_SIZE, romsize)
 		filebuf = append(filebuf, 0)
 		romsize++
 	}
 
-	if romsize > cart.MAX_ROM_SIZE {
-		fmt.Printf("Warning: Max ROM data size is %x, cropping input\n", cart.MAX_ROM_SIZE, romsize)
-		romsize = cart.MAX_ROM_SIZE
+	if romsize > mdcart.MAX_ROM_SIZE {
+		fmt.Printf("Warning: Max ROM data size is %x, cropping input\n", mdcart.MAX_ROM_SIZE, romsize)
+		romsize = mdcart.MAX_ROM_SIZE
 	}
 
 	fblen = romsize
@@ -263,19 +267,6 @@ func WriteRom(mdc device.MemCart, romfile string) error {
 	fmt.Println("OK")
 	return nil
 }
-
-/* Erase code:
-d.FlashResetBypass()
-
-for i = 0; i < romsize; i += 65536 {
-	d.FlashErase(i)
-	fmt.Printf("*")
-}
-fmt.Printf("\n")
-
-d.FlashUnlockBypass()
-
-*/
 
 func main() {
 	var (
@@ -462,7 +453,8 @@ func main() {
 		WriteRom(mdc, *romfile)
 	}
 
-	var i int
-	i = mdc.NumBanks()
-	fmt.Println(i)
+	if *rominfo {
+		gotromname, _ := mdcart.GetRomName(mdc)
+		fmt.Println(gotromname)
+	}
 }
