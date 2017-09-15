@@ -101,31 +101,6 @@ func GetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
 	return namestring, nil
 }
 
-func NewGetRomName(mdc device.MemCart) (string, error) {
-	var (
-		n   int
-		err error
-		mdr device.MemBank
-	)
-	err = mdc.SwitchBank(0)
-	if err != nil {
-		return "", err
-	}
-
-	mdr = mdc.GetCurrentBank()
-	mdr.Seek(0, io.SeekStart)
-	buf := make([]byte, 512)
-	n, err = mdr.Read(buf)
-	if n < 512 {
-		return "", errors.New("short read")
-	}
-	if err != nil {
-		return "", err
-	}
-
-	return GetRomNameFromHeader(buf)
-}
-
 func GetRomNameFromHeader(buf []byte) (string, error) {
 	var (
 		namestring string

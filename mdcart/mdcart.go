@@ -70,37 +70,6 @@ func GetRomRegion(rom_hdr []byte) string {
 	return "X"
 }
 
-func OldGetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
-	var (
-		n          int
-		err        error
-		namestring string
-	)
-
-	d.Seek(0, io.SeekStart)
-	buf := make([]byte, 512)
-	n, err = d.Read(buf)
-	if n < 512 {
-		return "", errors.New("short read")
-	}
-	if err != nil {
-		return "", err
-	}
-
-	namestring, err = searchRomName(buf[0x120:])
-	if err != nil {
-		namestring, err = searchRomName(buf[0x150:])
-	}
-
-	if err != nil {
-		namestring = "Unknown"
-	}
-
-	namestring = (fmt.Sprintf("%s (%s)", namestring, GetRomRegion(buf)))
-
-	return namestring, nil
-}
-
 func GetRomName(mdc memcart.MemCart) (string, error) {
 	var (
 		n   int
