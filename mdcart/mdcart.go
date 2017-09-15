@@ -5,8 +5,8 @@ package mdcart
 import (
 	"errors"
 	"fmt"
-	"github.com/grantek/fkmd/device"
 	"github.com/grantek/fkmd/krikzz_fkmd"
+	"github.com/grantek/fkmd/memcart"
 	"io"
 )
 
@@ -101,11 +101,11 @@ func OldGetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
 	return namestring, nil
 }
 
-func GetRomName(mdc device.MemCart) (string, error) {
+func GetRomName(mdc memcart.MemCart) (string, error) {
 	var (
 		n   int
 		err error
-		mdr device.MemBank
+		mdr memcart.MemBank
 	)
 	err = mdc.SwitchBank(0)
 	if err != nil {

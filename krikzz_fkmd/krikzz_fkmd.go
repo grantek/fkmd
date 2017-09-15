@@ -3,7 +3,7 @@ package krikzz_fkmd
 import (
 	"errors"
 	"fmt"
-	"github.com/grantek/fkmd/device"
+	"github.com/grantek/fkmd/memcart"
 	"github.com/jacobsa/go-serial/serial"
 	"io"
 )
@@ -39,7 +39,7 @@ func (d *Fkmd) SetOptions(options serial.OpenOptions) {
 	d.opt = options
 }
 
-func (d *Fkmd) Connect() (device.MemCart, error) {
+func (d *Fkmd) Connect() (memcart.MemCart, error) {
 	f, err := serial.Open(d.opt)
 	d.fd = f
 	if err != nil {
@@ -563,9 +563,9 @@ func (m *MDRam) GetSize() int64 {
 type MDCart struct {
 	d            *Fkmd
 	ramAvailable bool
-	currentBank  device.MemBank
-	romBank      device.MemBank
-	ramBank      device.MemBank
+	currentBank  memcart.MemBank
+	romBank      memcart.MemBank
+	ramBank      memcart.MemBank
 }
 
 func (mdc *MDCart) NumBanks() int {
@@ -577,7 +577,7 @@ func (mdc *MDCart) NumBanks() int {
 	return 0
 }
 
-func (mdc *MDCart) GetCurrentBank() device.MemBank {
+func (mdc *MDCart) GetCurrentBank() memcart.MemBank {
 	return mdc.currentBank
 }
 

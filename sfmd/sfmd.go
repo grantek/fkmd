@@ -11,9 +11,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/grantek/fkmd/device"
 	"github.com/grantek/fkmd/krikzz_fkmd"
 	"github.com/grantek/fkmd/mdcart"
+	"github.com/grantek/fkmd/memcart"
 	"github.com/jacobsa/go-serial/serial"
 )
 
@@ -24,14 +24,14 @@ func usage() {
 }
 
 //md specific
-func ReadRom(mdc device.MemCart, romfile string, autoname bool) {
+func ReadRom(mdc memcart.MemCart, romfile string, autoname bool) {
 	var (
 		romname   string
 		romsize   int64
 		blocksize int64 = 32768
 		f         *os.File
 		err       error
-		mdr       device.MemBank
+		mdr       memcart.MemBank
 	)
 	if autoname {
 		romname, err = mdcart.GetRomName(mdc)
@@ -77,12 +77,12 @@ func ReadRom(mdc device.MemCart, romfile string, autoname bool) {
 	fmt.Println()
 }
 
-func ReadRam(mdc device.MemCart, ramfile string, autoname bool) {
+func ReadRam(mdc memcart.MemCart, ramfile string, autoname bool) {
 	var (
 		err error
 		f   *os.File
 		n   int
-		mdr device.MemBank
+		mdr memcart.MemBank
 	)
 
 	err = mdc.SwitchBank(1)
@@ -128,7 +128,7 @@ func ReadRam(mdc device.MemCart, ramfile string, autoname bool) {
 	fmt.Println()
 }
 
-func WriteRam(mdc device.MemCart, ramfile string) {
+func WriteRam(mdc memcart.MemCart, ramfile string) {
 	var (
 		f         *os.File
 		n         int
@@ -178,7 +178,7 @@ func WriteRam(mdc device.MemCart, ramfile string) {
 	fmt.Printf("Verified %d bytes", n)
 }
 
-func WriteRom(mdc device.MemCart, romfile string) error {
+func WriteRom(mdc memcart.MemCart, romfile string) error {
 	var (
 		romsize  int64
 		blocklen int64 = 4096
@@ -371,7 +371,7 @@ func main() {
 	}
 
 	var d = krikzz_fkmd.New()
-	var mdc device.MemCart
+	var mdc memcart.MemCart
 	d.SetOptions(options)
 	mdc, err = d.Connect()
 
@@ -383,7 +383,7 @@ func main() {
 	}
 
 	/*
-		var mdr device.MemBank
+		var mdr memcart.MemBank
 
 		if *rominfo {
 			numbanks := mdc.NumBanks()
