@@ -1,15 +1,12 @@
 package memcart_mock
 
 import (
+	"bytes"
 	"github.com/grantek/fkmd/memcart"
 	"os"
+	"ioutil"
+	"errors"
 )
-
-/*
-type MemBank interface {
-	io.ReadWriteSeeker
-}
-*/
 
 type MockMemCart struct {
 	banks       []MockMemBank
@@ -33,7 +30,7 @@ func (mc *MockMemCart) SwitchBank(n int) error {
 }
 
 type MockMemBank struct {
-	f      *os.File
+	f      os.File
 	string name
 	int64  size
 }
@@ -56,4 +53,18 @@ func (d *MockMemBank) GetName() string {
 
 func (d *MockMemBank) GetSize() int64 {
 	return d.size
+}
+
+func NewMemBank(string name, io.Reader data)(memcart.MemBank, error){
+	var (
+		mb memcart.MockMemBank
+		err error
+		b []byte
+	)
+
+	err, b = ioutil.ReadAll(data)
+	if err != nil {
+		return nil, err
+	}
+	mb.f = bytes.NewBuffer(b)
 }
