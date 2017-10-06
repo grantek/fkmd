@@ -1,11 +1,12 @@
 package memcart_mock
 
 import (
-	"bytes"
-	"github.com/grantek/fkmd/memcart"
-	"os"
-	"ioutil"
 	"errors"
+	"fmt"
+	"github.com/grantek/fkmd/memcart"
+	"io"
+	//"io/ioutil"
+	"os"
 )
 
 type MockMemCart struct {
@@ -17,22 +18,22 @@ func (mc *MockMemCart) NumBanks() int {
 	return len(mc.banks)
 }
 
-func (mc *MockMemCart) GetCurrentBank() MemBank {
-	return mc.banks[currentbank]
+func (mc *MockMemCart) GetCurrentBank() memcart.MemBank {
+	return &mc.banks[mc.currentbank]
 }
 
 func (mc *MockMemCart) SwitchBank(n int) error {
 	if n < 0 || n >= len(mc.banks) {
 		return errors.New(fmt.Sprintf("Requested bank %d does not exist"))
 	}
-	currentbank = n
+	mc.currentbank = n
 	return nil
 }
 
 type MockMemBank struct {
-	f      os.File
-	string name
-	int64  size
+	f    io.ReadWriteSeeker
+	name string
+	size int64
 }
 
 func (d *MockMemBank) Read(p []byte) (n int, err error) {
@@ -55,16 +56,29 @@ func (d *MockMemBank) GetSize() int64 {
 	return d.size
 }
 
-func NewMemBank(string name, io.Reader data)(memcart.MemBank, error){
-	var (
-		mb memcart.MockMemBank
-		err error
-		b []byte
-	)
+func NewMemBank(name string, f io.ReadWriteSeeker, size int64) (memcart.MemBank, error) {
+	var mb MockMemBank
+	mb.f = f
+	mb.name = name
+	mb.size = size
+	return &mb, nil
+}
 
-	err, b = ioutil.ReadAll(data)
+func setup(filename string) {
+	var (
+		err error
+		fi  os.FileInfo
+	)
+	fi, err = os.Stat(filename)
 	if err != nil {
 		return nil, err
 	}
-	mb.f = bytes.NewBuffer(b)
+	if fi.Size() < 512 {
+		return nil, errors.New(Sprintf("Small file for MockMemBank: minimum 512, file \"%s\" detected as %d bytes", filename, fi.Size()))
+	}
+	f, err = os.OpenFile(filename, os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+
+	}
 }
