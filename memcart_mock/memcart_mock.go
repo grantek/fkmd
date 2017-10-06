@@ -63,22 +63,3 @@ func NewMemBank(name string, f io.ReadWriteSeeker, size int64) (memcart.MemBank,
 	mb.size = size
 	return &mb, nil
 }
-
-func setup(filename string) {
-	var (
-		err error
-		fi  os.FileInfo
-	)
-	fi, err = os.Stat(filename)
-	if err != nil {
-		return nil, err
-	}
-	if fi.Size() < 512 {
-		return nil, errors.New(Sprintf("Small file for MockMemBank: minimum 512, file \"%s\" detected as %d bytes", filename, fi.Size()))
-	}
-	f, err = os.OpenFile(filename, os.O_RDWR, 0600)
-	if err != nil {
-		return nil, err
-
-	}
-}

@@ -1,7 +1,5 @@
 package mdcart
 
-//These functions currently work on the kfkmd directly, but should be made to work on a bank/memcart interface
-
 import (
 	"errors"
 	"fmt"
