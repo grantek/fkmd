@@ -5,12 +5,14 @@ import (
 	//"errors"
 	"flag"
 	"fmt"
+	"github.com/grantek/fkmd/memcart_mock"
 	//"io"
 	"os"
 	"testing"
 )
 
 var mf *os.File
+var mmc *memcart_mock.MockMemCart
 
 func usage() {
 	flag.PrintDefaults()
@@ -19,12 +21,16 @@ func usage() {
 
 func setup(m *testing.M) int {
 	var (
-		err error
-		fi  os.FileInfo
-		f   *os.File
+		err  error
+		fi   os.FileInfo
+		f    *os.File
+		mrom *memcart_mock.MockMemBank
 	)
 	mockfile := flag.String("mockfile", "", "expected ROM dump from device")
 	flag.Parse()
+	if *mockfile == "" {
+		usage()
+	}
 	fi, err = os.Stat(*mockfile)
 	if err != nil {
 		panic(err)
@@ -35,14 +41,16 @@ func setup(m *testing.M) int {
 	f, err = os.OpenFile(*mockfile, os.O_RDWR, 0600)
 	if err != nil {
 		panic(err)
-	}
-
-	if err != nil {
-		fmt.Println("Error opening mock file: ", err)
-		return -1
 	} else {
 		defer f.Close()
 	}
+	mmc = new(memcart_mock.MockMemCart)
+	mrom, err = memcart_mock.NewMemBank("mdrom", f, fi.Size())
+
+	if err != nil {
+		panic(err)
+	}
+	mmc.AddBank(mrom)
 
 	return m.Run()
 }
@@ -51,14 +59,14 @@ func TestMain(m *testing.M) {
 	os.Exit(setup(m))
 }
 
-func TestGetID(t *testing.T) {
-	id, err := d.GetID()
+func TestGetRomName(t *testing.T) {
+	var err error
+	var romname string
+	romname, err = GetRomName(mmc)
+
 	if err != nil {
-		fmt.Println(err)
 		t.Fatal(err)
 	}
-	t.Log("ID:", id)
-	if id != 257 {
-		t.Fatal("ID", id, "not a known device ID")
-	}
+
+	fmt.Println(fmt.Sprintf("romname: %s", romname))
 }

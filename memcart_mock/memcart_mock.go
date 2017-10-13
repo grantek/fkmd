@@ -6,11 +6,11 @@ import (
 	"github.com/grantek/fkmd/memcart"
 	"io"
 	//"io/ioutil"
-	"os"
+	//"os"
 )
 
 type MockMemCart struct {
-	banks       []MockMemBank
+	banks       []*MockMemBank
 	currentbank int
 }
 
@@ -18,8 +18,14 @@ func (mc *MockMemCart) NumBanks() int {
 	return len(mc.banks)
 }
 
+func (mc *MockMemCart) AddBank(mb *MockMemBank) {
+	//mc.banks = append(mc.banks, mb)
+	asdf := append(mc.banks, mb)
+	mc.banks = asdf
+}
+
 func (mc *MockMemCart) GetCurrentBank() memcart.MemBank {
-	return &mc.banks[mc.currentbank]
+	return mc.banks[mc.currentbank]
 }
 
 func (mc *MockMemCart) SwitchBank(n int) error {
@@ -56,7 +62,7 @@ func (d *MockMemBank) GetSize() int64 {
 	return d.size
 }
 
-func NewMemBank(name string, f io.ReadWriteSeeker, size int64) (memcart.MemBank, error) {
+func NewMemBank(name string, f io.ReadWriteSeeker, size int64) (*MockMemBank, error) {
 	var mb MockMemBank
 	mb.f = f
 	mb.name = name
