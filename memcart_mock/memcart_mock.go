@@ -19,9 +19,7 @@ func (mc *MockMemCart) NumBanks() int {
 }
 
 func (mc *MockMemCart) AddBank(mb *MockMemBank) {
-	//mc.banks = append(mc.banks, mb)
-	asdf := append(mc.banks, mb)
-	mc.banks = asdf
+	mc.banks = append(mc.banks, mb)
 }
 
 func (mc *MockMemCart) GetCurrentBank() memcart.MemBank {
