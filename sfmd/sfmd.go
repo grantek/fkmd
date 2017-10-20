@@ -382,62 +382,6 @@ func main() {
 		defer d.Disconnect()
 	}
 
-	/*
-		var mdr memcart.MemBank
-
-		if *rominfo {
-			numbanks := mdc.NumBanks()
-			fmt.Printf("Banks: %d\n", numbanks)
-			for i := 0; i < numbanks; i++ {
-				mdc.SwitchBank(i)
-				mdr = mdc.GetCurrentBank()
-				name := mdr.GetName()
-				size := mdr.GetSize()
-				fmt.Printf("Bank %d: \"%s\" %d", i, name, size)
-			}
-		}
-	*/
-	/*
-		if *readrom {
-			mdc.SwitchBank(0)
-			mdr = mdc.GetCurrentBank()
-
-			if err != nil {
-				panic(err)
-			}
-
-			if *romfile == "" {
-				*romfile = "rom.out"
-			}
-			if *romfile == "-" {
-				f = os.Stdout
-			} else {
-				f, err = os.Create(*romfile)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-			}
-
-			if f != os.Stdout {
-				fmt.Println("Opened", romfile, "for writing")
-				defer f.Close()
-			}
-
-			romsize := mdr.GetSize()
-			buf := make([]byte, blocksize)
-			for i := int64(0); i < romsize; i += blocksize {
-				d.Read(buf)
-				f.Write(buf)
-				if f != os.Stdout {
-					fmt.Printf(".")
-				}
-			}
-
-			fmt.Println()
-
-		}*/
-
 	if *readram {
 		ReadRam(mdc, *ramfile, *autoname)
 	}
