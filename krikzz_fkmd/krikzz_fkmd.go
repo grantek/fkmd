@@ -21,6 +21,7 @@ const (
 	PAR_INC    byte = 128
 
 	WRITE_BLOCK_SIZE int64 = 65536
+	READ_BLOCK_SIZE  int64 = 65536
 
 	RAM_ADDR int64 = 0x20000
 )
@@ -39,30 +40,63 @@ func (d *Fkmd) SetOptions(options serial.OpenOptions) {
 	d.opt = options
 }
 
-func (d *Fkmd) Connect() (memcart.MemCart, error) {
-	f, err := serial.Open(d.opt)
-	d.fd = f
+//Perform initialisation and return a MemCart
+func (d *Fkmd) MemCart() (memcart.MemCart, error) {
+	var mdc MDCart
+	var err Error
+	err = d.Connect()
 	if err != nil {
-		return nil, err
+		return err
+	}
+	err = d.Handshake()
+	if err != nil {
+		return err
 	}
 
+	mdc, err = d.MDCart()
+	return &mdc, err
+}
+
+//Just open the serial device for low-level debugging
+func (d *Fkmd) Connect() error {
+	f, err := serial.Open(d.opt)
+	d.fd = f
+	return err
+}
+
+//Perform some initialisation and verify device ID, as per vendor driver
+//Requires Connect()
+func (d *Fkmd) Handshake() error {
 	//my flashkit device ID is 257, which matches this logic
 	id, err := d.GetID()
+	if err != nil {
+		return err
+	}
+
 	if (id&0xff) == (id>>8) && id != 0 {
-		//original code doesn't close and reopen
+		//vendor driver doesn't close and reopen
 		d.fd.Close()
 		//port.WriteTimeout = 2000;
 		//port.ReadTimeout = 2000;
 		d.opt.InterCharacterTimeout = 2000
 		f, err := serial.Open(d.opt)
-		d.fd = f
 		if err != nil {
-			return nil, err
+			return err
 		}
+		d.fd = f
 		//need to redo GetID after reopen
 		_, err = d.GetID()
+		if err != nil {
+			return err
+		}
 		err = d.SetDelay(0)
+		return err
 	}
+	return errors.New(fmt.Sprintf("Unknown device ID %d", id))
+}
+
+//Build a MDCart and attach it to the Fkmd device
+func (d *Fkmd) MDCart() (MDCart, error) {
 	var mdc MDCart
 	mdc.d = d
 	if d.RamAvailable() {
@@ -79,7 +113,7 @@ func (d *Fkmd) Connect() (memcart.MemCart, error) {
 	mdrom.d = d
 	mdc.romBank = &mdrom
 	mdc.SwitchBank(0)
-	return &mdc, err
+	return mdc, err
 }
 
 func (d *Fkmd) Disconnect() error {
@@ -151,7 +185,9 @@ func (d *Fkmd) Seek(offset int64, whence int) (int64, error) {
 	return offset, err
 }
 
-//odd offset OR len(p) will break these functions
+// MD devices are 16-BIT (as is emblazoned on the console) so the low-level
+// Read([]byte) doesn't support odd numbers of bytes
+// TODO(grantek): implement odd reads in MemCart interface
 func (d *Fkmd) Read(p []byte) (n int, err error) {
 	var (
 		req_len int = len(p) //total bytes left
@@ -162,19 +198,13 @@ func (d *Fkmd) Read(p []byte) (n int, err error) {
 	n = 0 //total bytes read
 	err = nil
 	if req_len%2 == 1 {
-		return 0, errors.New("Fkmd.Read: odd-sized read not implemented")
+		return 0, errors.New("Fkmd: odd-sized read not supported")
 	}
-	/*
-	   mod := 0
-	   if req_len % 2 == 1 {
-	       mod = 1
-	   }
-	*/
 
 	for req_len > 0 {
 		rd_len = req_len
-		if rd_len > 65536 {
-			rd_len = 65536
+		if rd_len > READ_BLOCK_SIZE {
+			rd_len = READ_BLOCK_SIZE
 		}
 		cmd := make([]byte, 5)
 		cmd[0] = CMD_LEN
@@ -199,13 +229,6 @@ func (d *Fkmd) Read(p []byte) (n int, err error) {
 		req_len -= rd_len
 	}
 
-	/*
-	   if mod == 1 {
-	       high := make([]byte, 1)
-	       read, err = d.fd.Read(p[n:n+rd_len-i])
-	       d.fd.Read(high)
-	   }
-	*/
 	return n, err
 }
 
