@@ -370,10 +370,10 @@ func main() {
 		Rs485RtsHighAfterSend:  *rs485HighAfterSend,
 	}
 
-	var d = krikzz_fkmd.New()
-	var mdc memcart.MemCart
+	var d = &krikzz_fkmd.Fkmd{}
 	d.SetOptions(options)
-	mdc, err = d.Connect()
+	var mdc memcart.MemCart
+	mdc, err = d.MemCart()
 
 	if err != nil {
 		fmt.Println("Error opening serial port: ", err)

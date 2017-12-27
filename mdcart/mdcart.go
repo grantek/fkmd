@@ -3,7 +3,6 @@ package mdcart
 import (
 	"errors"
 	"fmt"
-	"github.com/grantek/fkmd/krikzz_fkmd"
 	"github.com/grantek/fkmd/memcart"
 	"io"
 )

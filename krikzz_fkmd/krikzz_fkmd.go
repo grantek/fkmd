@@ -20,8 +20,8 @@ const (
 	PAR_SINGE  byte = 64
 	PAR_INC    byte = 128
 
-	WRITE_BLOCK_SIZE int64 = 65536
-	READ_BLOCK_SIZE  int64 = 65536
+	WRITE_BLOCK_SIZE int = 65536
+	READ_BLOCK_SIZE  int = 65536
 
 	RAM_ADDR int64 = 0x20000
 )
@@ -31,10 +31,10 @@ type Fkmd struct {
 	opt serial.OpenOptions
 }
 
-func New() *Fkmd {
-	var d Fkmd
-	return &d
-}
+//func New() *Fkmd {
+//	var d Fkmd
+//	return &d
+//}
 
 func (d *Fkmd) SetOptions(options serial.OpenOptions) {
 	d.opt = options
@@ -43,14 +43,14 @@ func (d *Fkmd) SetOptions(options serial.OpenOptions) {
 //Perform initialisation and return a MemCart
 func (d *Fkmd) MemCart() (memcart.MemCart, error) {
 	var mdc MDCart
-	var err Error
+	var err error
 	err = d.Connect()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	err = d.Handshake()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	mdc, err = d.MDCart()
@@ -113,7 +113,7 @@ func (d *Fkmd) MDCart() (MDCart, error) {
 	mdrom.d = d
 	mdc.romBank = &mdrom
 	mdc.SwitchBank(0)
-	return mdc, err
+	return mdc, nil
 }
 
 func (d *Fkmd) Disconnect() error {
@@ -345,7 +345,7 @@ func (d *Fkmd) Write(p []byte) (n int, err error) {
 
 // Erase 64KiB from addr (32K words)
 func (d *Fkmd) FlashErase(addr int64) error {
-	if addr%WRITE_BLOCK_SIZE > 0 {
+	if addr%int64(WRITE_BLOCK_SIZE) > 0 {
 		return errors.New(fmt.Sprintf("Flash erase request is not aligned to a %iKiB block", WRITE_BLOCK_SIZE/1024))
 	}
 	cmd := make([]byte, 8*8)
@@ -494,7 +494,7 @@ func (m *MDRom) Write(p []byte) (n int, err error) {
 		if chunksize > int(WRITE_BLOCK_SIZE) {
 			chunksize = int(WRITE_BLOCK_SIZE)
 		}
-		if m.addressCur%WRITE_BLOCK_SIZE == 0 {
+		if m.addressCur%int64(WRITE_BLOCK_SIZE) == 0 {
 			fmt.Printf("Debug: erasing at %d\n", m.addressCur)
 			m.d.FlashResetBypass()
 			m.d.FlashErase(m.addressCur)
