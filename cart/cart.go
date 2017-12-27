@@ -1,11 +1,9 @@
 package cart
 
-//These functions currently work on the kfkmd directly, but should be made to work on a bank/memcart interface
-
 import (
 	"errors"
 	"fmt"
-	"github.com/grantek/fkmd/krikzz_fkmd"
+	"github.com/grantek/fkmd/device"
 	"io"
 )
 
@@ -22,9 +20,6 @@ const (
 )
 
 func GetRomRegion(rom_hdr []byte) string {
-	if len(rom_hdr) < 0x1f2 {
-		return "X"
-	}
 	val := rom_hdr[0x1f0]
 	if val != rom_hdr[0x1f1] && rom_hdr[0x1f1] != 0x20 && rom_hdr[0x1f1] != 0 {
 		return "W"
@@ -69,7 +64,7 @@ func GetRomRegion(rom_hdr []byte) string {
 	return "X"
 }
 
-func GetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
+func GetRomName(d *device.Device) (string, error) {
 	var (
 		n          int
 		err        error
@@ -86,28 +81,6 @@ func GetRomName(d *krikzz_fkmd.Fkmd) (string, error) {
 		return "", err
 	}
 
-	namestring, err = searchRomName(buf[0x120:])
-	if err != nil {
-		namestring, err = searchRomName(buf[0x150:])
-	}
-
-	if err != nil {
-		namestring = "Unknown"
-	}
-
-	namestring = (fmt.Sprintf("%s (%s)", namestring, GetRomRegion(buf)))
-
-	return namestring, nil
-}
-
-func GetRomNameFromHeader(buf []byte) (string, error) {
-	var (
-		namestring string
-		err        error
-	)
-	if len(buf) < 512 {
-		return "", errors.New(fmt.Sprintf("Short ROM header, expected 512, got %d", len(buf)))
-	}
 	namestring, err = searchRomName(buf[0x120:])
 	if err != nil {
 		namestring, err = searchRomName(buf[0x150:])
@@ -190,14 +163,14 @@ NameLoop:
 	return namestring, nil
 }
 
-func RamAvailable(d *krikzz_fkmd.Fkmd) bool {
+func RamAvailable(d *device.Device) bool {
 	var (
 		first_word uint16
 		tmp        uint16
 		err        error
 	)
 
-	d.RamEnable()
+	d.WriteWord(0xA13000, 0xffff) //bank switch RAM in
 	first_word, err = d.ReadWord(0x200000)
 	d.WriteWord(0x200000, uint16(first_word^0xffff))
 	tmp, err = d.ReadWord(0x200000)
@@ -213,7 +186,7 @@ func RamAvailable(d *krikzz_fkmd.Fkmd) bool {
 	return true
 }
 
-func GetRamSize(d *krikzz_fkmd.Fkmd) int {
+func GetRamSize(d *device.Device) int {
 	var (
 		ram_size       int64
 		first_word     uint16
@@ -225,7 +198,7 @@ func GetRamSize(d *krikzz_fkmd.Fkmd) int {
 	)
 
 	//This commented-out write was in the original code
-	//Device.writeWord(0xA13000, 0x0001); //RamDisable()
+	//Device.writeWord(0xA13000, 0x0001);
 
 	if RamAvailable(d) == false { //RAM is banskswitched in here?
 		return 0
@@ -256,7 +229,7 @@ func GetRamSize(d *krikzz_fkmd.Fkmd) int {
 
 }
 
-func checkRomSize(d *krikzz_fkmd.Fkmd, base_addr int, max_len int) int {
+func checkRomSize(d *device.Device, base_addr int, max_len int) int {
 	var (
 		eq          bool
 		base_offset int = 0x8000
@@ -269,7 +242,7 @@ func checkRomSize(d *krikzz_fkmd.Fkmd, base_addr int, max_len int) int {
 	sector0 = make([]byte, 256)
 	sector = make([]byte, 256)
 
-	d.RamDisable()
+	d.WriteWord(0xA13000, 0x0000) //RAM disable
 	d.Seek(int64(base_addr), io.SeekStart)
 	d.Read(sector0)
 
@@ -298,8 +271,7 @@ func checkRomSize(d *krikzz_fkmd.Fkmd, base_addr int, max_len int) int {
 	return offset
 }
 
-// todo: seems to leave RAM in inconsistent bankswitch state
-func GetRomSize(d *krikzz_fkmd.Fkmd) (romsize int) {
+func GetRomSize(d *device.Device) (romsize int) {
 	var (
 		v            byte
 		i            int
@@ -314,7 +286,7 @@ func GetRomSize(d *krikzz_fkmd.Fkmd) (romsize int) {
 	if RamAvailable(d) { //RAM enable
 		ram = true
 		extra_rom = true
-		d.RamDisable()
+		d.WriteWord(0xA13000, 0x0000) //RAM disable
 		d.Seek(0x200000, io.SeekStart)
 		d.Read(sector0)
 		d.Seek(0x200000, io.SeekStart)
@@ -327,8 +299,8 @@ func GetRomSize(d *krikzz_fkmd.Fkmd) (romsize int) {
 		if extra_rom == true {
 			extra_rom = false
 			d.Seek(0x200000+0x10000, io.SeekStart)
-			d.Read(sector) //wtf? logic from original driver
-			d.RamEnable()
+			d.Read(sector)                //wtf?
+			d.WriteWord(0xA13000, 0xffff) //RAM ensable
 			d.Seek(0x200000, io.SeekStart)
 			d.Read(sector)
 			for i, v = range sector0 {

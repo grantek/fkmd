@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"github.com/grantek/fkmd/cart"
+	"github.com/grantek/fkmd/device"
 	"github.com/jacobsa/go-serial/serial"
-	//"github.com/grantek/fkmd/device"
-	"github.com/grantek/fkmd/krikzz_fkmd"
+	//"github.com/grantek/fkmd/krikzz_fkmd"
 )
 
 func usage() {
@@ -24,11 +24,12 @@ func usage() {
 }
 
 //md specific
-func ReadRom(d *krikzz_fkmd.Fkmd, romfile string, autoname bool) {
+func ReadRom(d *device.Device, romfile string, autoname bool, rangestart, rangeend int64) {
 	var (
 		romname   string
-		romsize   int
+		romsize   int64
 		blocksize int = 32768
+		n         int
 		f         *os.File
 		err       error
 	)
@@ -54,20 +55,27 @@ func ReadRom(d *krikzz_fkmd.Fkmd, romfile string, autoname bool) {
 		defer f.Close()
 	}
 
-	romsize = cart.GetRomSize(d)
-	d.Seek(0, io.SeekStart)
+	if rangeend > 0 {
+		romsize = rangeend - rangestart
+	} else {
+		romsize = int64(cart.GetRomSize(d))
+	}
+	d.Seek(rangestart, io.SeekStart)
 	buf := make([]byte, blocksize)
-	for i := 0; i < romsize; i += blocksize {
-		d.Read(buf)
-		f.Write(buf)
-		if f != os.Stdout {
-			fmt.Printf(".")
+	for i := int64(0); i < romsize; i += int64(blocksize) {
+		n, err = d.Read(buf)
+		if err != nil {
+			panic(err)
 		}
+		f.Write(buf)
+		//if f != os.Stdout {
+		fmt.Printf("asdf: %d", n)
+		//}
 	}
 	fmt.Println()
 }
 
-func ReadRam(d *krikzz_fkmd.Fkmd, ramfile string, autoname bool) {
+func ReadRam(d *device.Device, ramfile string, autoname bool, rangestart, rangeend int64) {
 	var (
 		romname string
 		ramsize int
@@ -80,6 +88,7 @@ func ReadRam(d *krikzz_fkmd.Fkmd, ramfile string, autoname bool) {
 		fmt.Println("RAM not detected for reading")
 		return
 	}
+	ramsize = ramsize * 2
 	if autoname {
 		romname, _ = cart.GetRomName(d)
 		re := regexp.MustCompile("  *")
@@ -123,7 +132,7 @@ func ReadRam(d *krikzz_fkmd.Fkmd, ramfile string, autoname bool) {
 	}
 }
 
-func WriteRam(d *krikzz_fkmd.Fkmd, ramfile string) error {
+func WriteRam(d *device.Device, ramfile string) error {
 	var (
 		ramsize int
 		f       *os.File
@@ -150,21 +159,21 @@ func WriteRam(d *krikzz_fkmd.Fkmd, ramfile string) error {
 		defer f.Close()
 	}
 
-	buf := make([]byte, ramsize)
+	buf := make([]byte, ramsize*2)
 	nextbyte := make([]byte, 1)
-	for i = 0; i < ramsize; {
+	for i = 0; i < ramsize*2; {
 		j, err = f.Read(buf)
 		i += j
 		if err != nil {
 			return err
 		}
 		if j == 0 {
-			return errors.New(fmt.Sprintf("error: read %d bytes from ramfile \"%s\", need %d", i, ramfile, ramsize))
+			return errors.New(fmt.Sprintf("error: read %d bytes from ramfile \"%s\", need %d bytes in a word-aligned file", i, ramfile, ramsize))
 		}
 	}
 	j, err = f.Read(nextbyte)
 	if err == nil || j > 0 {
-		return errors.New(fmt.Sprintf("error: read data beyond %d bytes from ramfile \"%s\": %x", ramsize, ramfile, nextbyte[0]))
+		return errors.New(fmt.Sprintf("error: read data beyond %d bytes from ramfile \"%s\": %x", ramsize*2, ramfile, nextbyte[0]))
 	}
 
 	d.RamEnable()
@@ -176,10 +185,10 @@ func WriteRam(d *krikzz_fkmd.Fkmd, ramfile string) error {
 		panic(err)
 	}
 	fmt.Println("Verify...")
-	buf2 := make([]byte, ramsize)
+	buf2 := make([]byte, ramsize*2)
 	d.Seek(0x200000, io.SeekStart)
 	n, err = d.Read(buf2)
-	if n < ramsize {
+	if n < ramsize*2 {
 		panic(errors.New("short RAM read"))
 	}
 	if err != nil {
@@ -194,7 +203,7 @@ func WriteRam(d *krikzz_fkmd.Fkmd, ramfile string) error {
 	return nil
 }
 
-func WriteRom(d *krikzz_fkmd.Fkmd, romfile string) error {
+func WriteRom(d *device.Device, romfile string) error {
 	var (
 		romsize  int64
 		blocklen int64 = 4096
@@ -343,6 +352,8 @@ func main() {
 	autoname := flag.Bool("autoname", false, "Read ROM name and generate filenames to save ROM/RAM data")
 	romfile := flag.String("romfile", "", "File to save or read ROM data")
 	ramfile := flag.String("ramfile", "", "File to save or read RAM data")
+	rangestart := flag.Int64("rangestart", 0, "Do not probe size, start at this byte (requires end)")
+	rangeend := flag.Int64("rangeend", 0, "Do not probe size, end at this byte")
 
 	flag.Parse()
 
@@ -396,6 +407,11 @@ func main() {
 		usage()
 	}
 
+	if *rangestart > 0 && *rangeend < *rangestart {
+		fmt.Println("Bad range")
+		usage()
+	}
+
 	options := serial.OpenOptions{
 		PortName:               *port,
 		BaudRate:               *baud,
@@ -409,7 +425,7 @@ func main() {
 		Rs485RtsHighAfterSend:  *rs485HighAfterSend,
 	}
 
-	var d = krikzz_fkmd.New()
+	var d = device.New()
 	d.SetOptions(options)
 	err = d.Connect()
 
@@ -434,11 +450,11 @@ func main() {
 	}
 
 	if *readrom {
-		ReadRom(d, *romfile, *autoname)
+		ReadRom(d, *romfile, *autoname, *rangestart, *rangeend)
 	}
 
 	if *readram {
-		ReadRam(d, *ramfile, *autoname)
+		ReadRam(d, *ramfile, *autoname, *rangestart, *rangeend)
 	}
 
 	if *writeram {
