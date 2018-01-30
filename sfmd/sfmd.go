@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -15,6 +16,12 @@ import (
 	"github.com/grantek/fkmd/mdcart"
 	"github.com/grantek/fkmd/memcart"
 	"github.com/jacobsa/go-serial/serial"
+)
+
+var (
+	elog *log.Logger //Always output to stderr
+	ilog *log.Logger //Verbose output
+	dlog *log.Logger //Debug output
 )
 
 func usage() {
@@ -30,6 +37,8 @@ func ReadRom(mdc memcart.MemCart, romfile string, autoname bool) {
 		romsize   int64
 		blocksize int64 = 32768
 		f         *os.File
+		n         int64 //counter for outer read in bytes
+		m         int   //counter for inner read in bytes
 		err       error
 		mdr       memcart.MemBank
 	)
@@ -54,35 +63,36 @@ func ReadRom(mdc memcart.MemCart, romfile string, autoname bool) {
 	} else {
 		f, err = os.Create(romfile)
 		if err != nil {
-			fmt.Println(err)
-			return
+			panic(err)
 		}
-	}
-
-	if f != os.Stdout {
-		fmt.Println("Opened", romfile, "for writing")
+		ilog.Println("Opened", romfile, "for writing")
 		defer f.Close()
 	}
 
 	romsize = mdr.GetSize()
 	mdr.Seek(0, io.SeekStart)
 	buf := make([]byte, blocksize)
-	for i := int64(0); i < romsize; i += blocksize {
-		mdr.Read(buf)
-		f.Write(buf)
-		if f != os.Stdout {
-			fmt.Printf(".")
+	for n := int64(0); n < romsize; n += blocksize {
+		m, err = mdr.Read(buf)
+		if err != nil {
+			panic(err)
 		}
+		if int64(m) < blocksize {
+			elog.Printf("Short read at %d, expected romsize %d", n+int64(m), romsize)
+			break
+		}
+		f.Write(buf[0:n])
+		dlog.Printf("Bytes read: %d", n)
 	}
-	fmt.Println()
+	ilog.Printf("Finished reading, bytes read: %d", n)
 }
 
 func ReadRam(mdc memcart.MemCart, ramfile string, autoname bool) {
 	var (
-		err error
-		f   *os.File
-		n   int
-		mdr memcart.MemBank
+		err  error
+		f    *os.File
+		n, m int
+		mdr  memcart.MemBank
 	)
 
 	err = mdc.SwitchBank(1)
@@ -98,6 +108,7 @@ func ReadRam(mdc memcart.MemCart, ramfile string, autoname bool) {
 	if ramfile == "" {
 		ramfile = "ram.out"
 	}
+
 	if ramfile == "-" {
 		f = os.Stdout
 	} else {
@@ -105,27 +116,23 @@ func ReadRam(mdc memcart.MemCart, ramfile string, autoname bool) {
 		if err != nil {
 			panic(err)
 		}
-	}
-
-	if f != os.Stdout {
-		fmt.Println("Opened", ramfile, "for writing")
+		ilog.Println("Opened ", ramfile, " for writing")
 		defer f.Close()
 	}
 
 	ramsize := mdr.GetSize()
 	buf := make([]byte, ramsize)
-	bytesread := 0
-	for bytesread < int(ramsize) {
-		n, err = mdr.Read(buf[bytesread:])
-		bytesread += n
-		if err != nil || bytesread == 0 {
-			panic("short RAM read")
+
+	for n < int(ramsize) {
+		m, err = mdr.Read(buf[n:])
+		n += m
+		if err != nil || m == 0 {
+			panic(fmt.Sprintf("Short RAM read, read %d bytes", n+m))
 		}
 	}
-
+	ilog.Printf("Read %d bytes", n)
 	f.Write(buf)
-
-	fmt.Println()
+	ilog.Printf("Ok")
 }
 
 func WriteRam(mdc memcart.MemCart, ramfile string) {
@@ -148,11 +155,10 @@ func WriteRam(mdc memcart.MemCart, ramfile string) {
 		if err != nil {
 			panic(err)
 		}
-	}
-	if f != os.Stdin {
-		fmt.Println("Opened", ramfile, "for reading")
+		ilog.Println("Opened", ramfile, "for reading")
 		defer f.Close()
 	}
+
 	ram, err = ioutil.ReadAll(f)
 	if err != nil {
 		panic(err)
@@ -161,21 +167,21 @@ func WriteRam(mdc memcart.MemCart, ramfile string) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Wrote %d bytes", n)
+	ilog.Printf("Wrote %d bytes", n)
 	if n < len(ram) {
-		fmt.Printf("WARNING: wrote %d bytes, input is %d bytes.\n", n, len(ram))
+		elog.Printf("WARNING: wrote %d bytes, input is %d bytes.\n", n, len(ram))
 	}
 	if int64(n) < mdr.GetSize() {
-		fmt.Printf("WARNING: wrote %d bytes, cartridge RAM is %d bytes.\n", n, len(ram))
+		elog.Printf("WARNING: wrote %d bytes, cartridge RAM is %d bytes.\n", n, len(ram))
 	}
-	fmt.Println("Verify...")
+	ilog.Println("Verify...")
 	mdr.Seek(0, io.SeekStart)
 	for i := 0; i < n; i++ {
 		if ram[i] != ram2[i] {
 			panic(fmt.Sprintf("Failed verification at byte %d", i))
 		}
 	}
-	fmt.Printf("Verified %d bytes", n)
+	ilog.Printf("Verified %d bytes", n)
 }
 
 func WriteRom(mdc memcart.MemCart, romfile string) error {
@@ -197,6 +203,8 @@ func WriteRom(mdc memcart.MemCart, romfile string) error {
 		if err != nil {
 			return err
 		}
+		ilog.Println("Opened", romfile, "for reading")
+		defer f.Close()
 	}
 
 	filebuf, err = ioutil.ReadAll(f)
@@ -209,22 +217,22 @@ func WriteRom(mdc memcart.MemCart, romfile string) error {
 	}
 
 	romsize = int64(len(filebuf))
+	ilog.Println("Read %d bytes from file", len(filebuf))
 
-	fmt.Printf("Read %d bytes from %s\n", romsize, romfile)
 	if romsize%2 == 1 {
-		fmt.Printf("Warning: file size in bytes is odd\n", mdcart.MAX_ROM_SIZE, romsize)
+		elog.Printf("WARNING: file size in bytes is odd", mdcart.MAX_ROM_SIZE, romsize)
 		filebuf = append(filebuf, 0)
 		romsize++
 	}
 
 	if romsize > mdcart.MAX_ROM_SIZE {
-		fmt.Printf("Warning: Max ROM data size is %x, cropping input\n", mdcart.MAX_ROM_SIZE, romsize)
+		elog.Printf("WARNING: Max ROM data size is %x, cropping input\n", mdcart.MAX_ROM_SIZE, romsize)
 		romsize = mdcart.MAX_ROM_SIZE
 	}
 
 	fblen = romsize
 	if romsize < 0x8000 {
-		return errors.New("Error: file size < 32KiB, pad with 0xFF if required")
+		return errors.New("File size < 32KiB, pad with 0xFF if required")
 	}
 
 	if romsize%0x10000 != 0 {
@@ -235,17 +243,17 @@ func WriteRom(mdc memcart.MemCart, romfile string) error {
 	mdr := mdc.GetCurrentBank()
 
 	//Going to rely on Write() performing block erasure
-	fmt.Println("Flash write...")
+	ilog.Println("Flash write...")
 	for i = 0; i < fblen; i += blocklen {
 		if i+blocklen > fblen {
 			blocklen = fblen - i
 		}
+		//TODO: n, err
 		mdr.Write(filebuf[i : i+blocklen])
-		fmt.Printf("*")
+		dlog.Printf("Bytes written: %d", i)
 	}
-	fmt.Printf("\n")
 
-	fmt.Println("Flash verify...")
+	ilog.Println("Flash verify...")
 	rom2 := make([]byte, romsize)
 
 	mdr.Seek(0, io.SeekStart)
@@ -254,9 +262,8 @@ func WriteRom(mdc memcart.MemCart, romfile string) error {
 			blocklen = fblen - i
 		}
 		mdr.Read(rom2[i : i+blocklen])
-		fmt.Printf(".")
+		dlog.Printf("Bytes read: %d", i)
 	}
-	fmt.Printf("\n")
 
 	for i = 0; i < fblen; i++ {
 		if rom2[i] != filebuf[i] {
@@ -264,7 +271,7 @@ func WriteRom(mdc memcart.MemCart, romfile string) error {
 		}
 	}
 
-	fmt.Println("OK")
+	ilog.Println("OK")
 	return nil
 }
 
@@ -319,41 +326,55 @@ func main() {
 	autoname := flag.Bool("autoname", false, "Read ROM name and generate filenames to save ROM/RAM data")
 	romfile := flag.String("romfile", "", "File to save or read ROM data")
 	ramfile := flag.String("ramfile", "", "File to save or read RAM data")
+	verbose := flag.Bool("verbose", false, "Output info logs to stderr")
+	debug := flag.Bool("debug", false, "Output debug logs to stderr (implies verbose)")
 
 	flag.Parse()
 
+	elog = log.New(os.Stderr, "", log.Lshortfile)
+	if *verbose || *debug {
+		ilog = log.New(os.Stderr, "", log.Lshortfile)
+	} else {
+		ilog = log.New(ioutil.Discard, "", 0)
+	}
+
+	if *debug {
+		dlog = log.New(os.Stderr, "", log.Lshortfile)
+	} else {
+		dlog = log.New(ioutil.Discard, "", 0)
+	}
 	if *port == "" {
-		fmt.Println("Must specify port")
+		elog.Println("Must specify port")
 		usage()
 	}
 
 	if *readram && *writeram {
-		fmt.Println("Can't read and write cartridge RAM in one invocation")
+		elog.Println("Can't read and write cartridge RAM in one invocation")
 		usage()
 	}
 
 	if *readrom && *writerom {
-		fmt.Println("Can't read and write cartridge ROM in one invocation")
+		elog.Println("Can't read and write cartridge ROM in one invocation")
 		usage()
 	}
 
 	if (*romfile != "" || *ramfile != "") && *autoname {
-		fmt.Println("Can't supply file names when autoname is used")
+		elog.Println("Can't supply file names when autoname is used")
 		usage()
 	}
 
 	if (*readrom || *writerom) && (*romfile == "" && !*autoname) {
-		fmt.Println("No ROM file name supplied")
+		elog.Println("No ROM file name supplied")
 		usage()
 	}
 
 	if (*readram || *writeram) && (*ramfile == "" && !*autoname) {
-		fmt.Println("No RAM file name supplied")
+		elog.Println("No RAM file name supplied")
 		usage()
 	}
 
 	if !*readrom && !*writerom && !*readram && !*writeram && !*rominfo {
-		fmt.Println("No action specified")
+		elog.Println("No action specified")
 		usage()
 	}
 
@@ -401,4 +422,5 @@ func main() {
 		gotromname, _ := mdcart.GetRomName(mdc)
 		fmt.Println(gotromname)
 	}
+
 }
