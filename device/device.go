@@ -355,6 +355,24 @@ func (d *Device) FlashResetBypass() {
 	d.WriteByte(0, 0x00)
 }
 
+func (d *Device) RamEnable() error {
+    err := d.SetDelay(1)
+    if err != nil {
+        return err
+    }
+    err = d.WriteWord(0xA13000, 0xffff)
+    return err
+}
+
+func (d *Device) RamDisable() error {
+    err := d.WriteWord(0xA13000, 0x0000)
+    if err != nil {
+        return err
+    }
+    err = d.SetDelay(0)
+    return err
+}
+
 // expected use is to perform full erase, seek to 0, then run this with chunks of data until complete
 func (d *Device) FlashWrite(buf []byte) error {
 	if len(buf)%2 == 1 {

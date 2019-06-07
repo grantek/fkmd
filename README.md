@@ -22,23 +22,27 @@ Use of the krikzz.com source code for the Windows C# utility is with permission
 
 ## Usage
 ```
-fkmd usage:
+Usage of fkmd:
   -autoname
-        Read ROM name and generate filenames to save ROM/RAM data
+    	Read ROM name and generate filenames to save ROM/RAM data
   -port string
-        serial port to use (/dev/ttyUSB0, etc) (default "/dev/ttyUSB0")
+    	serial port to use (/dev/ttyUSB0, etc) (default "/dev/ttyUSB0")
   -ramfile string
-        File to save or read RAM data
+    	File to save or read RAM data
+  -rangeend int
+    	Do not probe size, end at this byte
+  -rangestart int
+    	Do not probe size, start at this byte (requires end)
   -readram
-        Read and output RAM
+    	Read and output RAM
   -readrom
-        Read and output ROM
+    	Read and output ROM
   -romfile string
-        File to save or read ROM data
+    	File to save or read ROM data
   -rominfo
-        Print ROM info
+    	Print ROM info
   -writeram
-        Write supplied RAM data to cartridge
+    	Write supplied RAM data to cartridge
   -writerom
-        (Flash cart only) Write ROM data to flash
+    	(Flash cart only) Write ROM data to flash
 ```
