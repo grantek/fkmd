@@ -25,7 +25,7 @@ var (
 )
 
 func usage() {
-	fmt.Println("fkmd usage:")
+	fmt.Println("sfmd usage:")
 	flag.PrintDefaults()
 	os.Exit(-1)
 }
@@ -81,8 +81,8 @@ func ReadRom(mdc memcart.MemCart, romfile string, autoname bool) {
 			elog.Printf("Short read at %d, expected romsize %d", n+int64(m), romsize)
 			break
 		}
-		f.Write(buf[0:n])
-		dlog.Printf("Bytes read: %d", n)
+		f.Write(buf[0:m])
+		dlog.Printf("Bytes read: %d", m)
 	}
 	ilog.Printf("Finished reading, bytes read: %d", n)
 }
@@ -177,6 +177,7 @@ func WriteRam(mdc memcart.MemCart, ramfile string) {
 	ilog.Println("Verify...")
 	mdr.Seek(0, io.SeekStart)
 	for i := 0; i < n; i++ {
+		//TODO: check word length here
 		if ram[i] != ram2[i] {
 			panic(fmt.Sprintf("Failed verification at byte %d", i))
 		}
@@ -397,7 +398,7 @@ func main() {
 	mdc, err = d.MemCart()
 
 	if err != nil {
-		fmt.Println("Error opening serial port: ", err)
+		elog.Println("Error opening serial port: ", err)
 		os.Exit(-1)
 	} else {
 		defer d.Disconnect()
@@ -414,6 +415,7 @@ func main() {
 	if *readrom {
 		ReadRom(mdc, *romfile, *autoname)
 	}
+
 	if *writerom {
 		WriteRom(mdc, *romfile)
 	}
@@ -422,5 +424,4 @@ func main() {
 		gotromname, _ := mdcart.GetRomName(mdc)
 		fmt.Println(gotromname)
 	}
-
 }

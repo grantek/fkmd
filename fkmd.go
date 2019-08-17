@@ -29,7 +29,6 @@ func ReadRom(d *device.Device, romfile string, autoname bool, rangestart, rangee
 		romname   string
 		romsize   int64
 		blocksize int = 32768
-		n         int
 		f         *os.File
 		err       error
 	)
@@ -63,16 +62,18 @@ func ReadRom(d *device.Device, romfile string, autoname bool, rangestart, rangee
 	d.Seek(rangestart, io.SeekStart)
 	buf := make([]byte, blocksize)
 	for i := int64(0); i < romsize; i += int64(blocksize) {
-		n, err = d.Read(buf)
+		_, err = d.Read(buf)
 		if err != nil {
 			panic(err)
 		}
 		f.Write(buf)
-		//if f != os.Stdout {
-		fmt.Printf("asdf: %d", n)
-		//}
+		if f != os.Stdout {
+			fmt.Printf(".")
+		}
 	}
-	fmt.Println()
+	if f != os.Stdout {
+		fmt.Println()
+	}
 }
 
 func ReadRam(d *device.Device, ramfile string, autoname bool, rangestart, rangeend int64) {
@@ -195,7 +196,8 @@ func WriteRam(d *device.Device, ramfile string) error {
 		panic(err)
 	}
 	for i, v = range buf {
-		if buf2[i] != v {
+		// skip over high bytes of 16-bit reads
+		if i%2 != 0 && buf2[i] != v {
 			return errors.New(fmt.Sprintf("Failed verification at byte %d", i))
 		}
 	}
