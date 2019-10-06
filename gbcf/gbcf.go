@@ -30,10 +30,10 @@ import (
 
 const (
 	// enum cchars
-	ACK  = 0xAA
-	NAK  = 0xF0
-	END  = 0x0F
-	DATA = 0x55
+	ACK  byte = 0xAA
+	NAK  byte = 0xF0
+	END  byte = 0x0F
+	DATA byte = 0x55
 
 	SERIAL_TIMEOUT = 3 * time.Second
 	DELETE_TIMEOUT = 60 * time.Second
@@ -129,7 +129,28 @@ func (d *Gbcf) Connect() error {
 }
 
 // Note: original driver always sends fixed PACKETSIZE packets
-func (d *Gbcf) send_packet([]byte) error {
+func (d *Gbcf) send_packet(b []byte) error {
+	n, err := d.fd.Write(cmd)
+	if err {
+		return err
+	}
+	if n != len(b) {
+		return fmt.Errorf("short write: sent %d of %d", n, len(b))
+	}
+	return nil
+}
+
+// Receive a character when a control character is expected
+func (d *Gbcf) receive_char() (byte, error) {
+	var b [1]byte
+	n, err := d.fd.Read(b)
+	if err != nil {
+		return 0, err
+	}
+	if n < len(b) {
+		return 0, fmt.Errorf("short read: sent %d of %d", n, len(b))
+	}
+	return b[0], nil
 }
 
 /* from fkmd:
