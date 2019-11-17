@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 	//"github.com/grantek/fkmd/gbcart"
+	"github.com/howeyc/crc16/crc16"
 	"github.com/jacobsa/go-serial/serial"
 	"io"
 )
@@ -28,6 +29,42 @@ import (
 
 */
 
+type Packet struct {
+	//ptype byte,
+	//command byte,
+	//subcommand byte,
+	//algo byte,
+	//mbc byte,
+	//frame byte[FRAMESIZE],
+	//crc16 uint16,
+	bytes [PACKETSIZE]byte
+}
+
+/*
+generate_crc16:
+original source defines its own crc16 function.
+- the predefined table is CRC16-CCITT-FALSE
+- the function hashes the bytes of the packet and returns a short
+*/
+func (p *Packet) generate_crc16() error {
+	// TODO: return validate error
+	c := crc16.ChecksumCCITTFalse(p.bytes[:PACKETSIZE-2])
+	p.bytes[PACKETSIZE-2] = c / 256
+	p.bytes[PACKETSIZE-1] = c % 256
+	return nil
+}
+
+func (p *Packet) Serialise() ([]byte, error) {
+	if err := p.generate_crc16(); err != nil {
+		return nil, err
+	}
+	b := make([]byte, PACKETSIZE)
+	if n := copy(b, p.bytes); n != PACKETSIZE {
+		return nil, fmt.Errorf("Serialise: copied %d of %d bytes", n, PACKETSIZE)
+	}
+	return b, nil
+}
+
 const (
 	// enum cchars
 	ACK  byte = 0xAA
@@ -39,9 +76,9 @@ const (
 	DELETE_TIMEOUT = 60 * time.Second
 	PACKETSIZE     = 72
 	FRAMESIZE      = 64
-	AUTOSIZE       = -1
-	PORTS_COUNT    = 4
-	VER            = "1.1"
+	//AUTOSIZE       = -1 // unused
+	//PORTS_COUNT    = 4 // not used in protocol
+	//VER            = "1.1" // not used in protocol
 
 	//enum error_t
 	TIMEOUT     = -1
@@ -61,15 +98,20 @@ const (
 	ERASE       = 0x03
 	STATUS      = 0x04
 
+	// filler subcommand used in *_DATA
 	RESERVED = 0x00
-	NREAD_ID = 0x00
-	READ_ID  = 0x01
 
-	// operations
+	// subcommands used in STATUS
+	NREAD_ID = 0x00 // read device information only
+	READ_ID  = 0x01 // read device+cartridge information
+
+	// subcommands used in CONFIG
 	RROM = 0x00
 	RRAM = 0x01
 	WROM = 0x02
 	WRAM = 0x03
+
+	// subcommands used in ERASE
 	EFLA = 0x00
 	ERAM = 0x01
 
@@ -129,7 +171,8 @@ func (d *Gbcf) Connect() error {
 }
 
 // Note: original driver always sends fixed PACKETSIZE packets
-func (d *Gbcf) send_packet(b []byte) error {
+func (d *Gbcf) sendPacket(p *Packet) error {
+	b := p.Serialise()
 	n, err := d.fd.Write(cmd)
 	if err {
 		return err
@@ -138,6 +181,14 @@ func (d *Gbcf) send_packet(b []byte) error {
 		return fmt.Errorf("short write: sent %d of %d", n, len(b))
 	}
 	return nil
+}
+
+func (d *Gbcf) ReadDeviceStatus() {
+	p := Packet{}
+	p.SetType(DATA)
+	p.SetCommand(STATUS)
+	p.SetSubcommand(NREAD_ID)
+	d.sendPacket(p)
 }
 
 // Receive a character when a control character is expected
