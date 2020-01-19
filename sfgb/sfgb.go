@@ -2,16 +2,17 @@ package main
 
 import (
 	//"encoding/hex"
-	"errors"
+	//"errors"
 	"flag"
 	"fmt"
-	"io"
+	//"io"
 	"io/ioutil"
 	"log"
 	"os"
-	"regexp"
-	"strings"
+	//"regexp"
+	//"strings"
 
+	"github.com/grantek/fkmd/gbcf"
 	"github.com/jacobsa/go-serial/serial"
 )
 
@@ -71,13 +72,13 @@ func main() {
 
 	//fkmd options
 	rominfo := flag.Bool("rominfo", false, "Print ROM info")
-	readrom := flag.Bool("readrom", false, "Read and output ROM")
-	writerom := flag.Bool("writerom", false, "(Flash cart only) Write ROM data to flash")
-	readram := flag.Bool("readram", false, "Read and output RAM")
-	writeram := flag.Bool("writeram", false, "Write supplied RAM data to cartridge")
-	autoname := flag.Bool("autoname", false, "Read ROM name and generate filenames to save ROM/RAM data")
-	romfile := flag.String("romfile", "", "File to save or read ROM data")
-	ramfile := flag.String("ramfile", "", "File to save or read RAM data")
+	//readrom := flag.Bool("readrom", false, "Read and output ROM")
+	//writerom := flag.Bool("writerom", false, "(Flash cart only) Write ROM data to flash")
+	//readram := flag.Bool("readram", false, "Read and output RAM")
+	//writeram := flag.Bool("writeram", false, "Write supplied RAM data to cartridge")
+	//autoname := flag.Bool("autoname", false, "Read ROM name and generate filenames to save ROM/RAM data")
+	//romfile := flag.String("romfile", "", "File to save or read ROM data")
+	//ramfile := flag.String("ramfile", "", "File to save or read RAM data")
 	verbose := flag.Bool("verbose", false, "Output info logs to stderr")
 	debug := flag.Bool("debug", false, "Output debug logs to stderr (implies verbose)")
 
@@ -100,35 +101,37 @@ func main() {
 		usage()
 	}
 
-	if *readram && *writeram {
-		elog.Println("Can't read and write cartridge RAM in one invocation")
-		usage()
-	}
+	/*
+		if *readram && *writeram {
+			elog.Println("Can't read and write cartridge RAM in one invocation")
+			usage()
+		}
 
-	if *readrom && *writerom {
-		elog.Println("Can't read and write cartridge ROM in one invocation")
-		usage()
-	}
+		if *readrom && *writerom {
+			elog.Println("Can't read and write cartridge ROM in one invocation")
+			usage()
+		}
 
-	if (*romfile != "" || *ramfile != "") && *autoname {
-		elog.Println("Can't supply file names when autoname is used")
-		usage()
-	}
+		if (*romfile != "" || *ramfile != "") && *autoname {
+			elog.Println("Can't supply file names when autoname is used")
+			usage()
+		}
 
-	if (*readrom || *writerom) && (*romfile == "" && !*autoname) {
-		elog.Println("No ROM file name supplied")
-		usage()
-	}
+		if (*readrom || *writerom) && (*romfile == "" && !*autoname) {
+			elog.Println("No ROM file name supplied")
+			usage()
+		}
 
-	if (*readram || *writeram) && (*ramfile == "" && !*autoname) {
-		elog.Println("No RAM file name supplied")
-		usage()
-	}
+		if (*readram || *writeram) && (*ramfile == "" && !*autoname) {
+			elog.Println("No RAM file name supplied")
+			usage()
+		}
 
-	if !*readrom && !*writerom && !*readram && !*writeram && !*rominfo {
-		elog.Println("No action specified")
-		usage()
-	}
+		if !*readrom && !*writerom && !*readram && !*writeram && !*rominfo {
+			elog.Println("No action specified")
+			usage()
+		}
+	*/
 
 	options := serial.OpenOptions{
 		PortName:               *port,
@@ -143,11 +146,12 @@ func main() {
 		Rs485RtsHighAfterSend:  *rs485HighAfterSend,
 	}
 
-	//var d = &krikzz_fkmd.Fkmd{}
-	//d.SetOptions(options)
+	var d = &gbcf.Gbcf{}
+	d.SetOptions(options)
 	//var mdc memcart.MemCart
 	//mdc, err = d.MemCart()
 
+	err = d.Connect()
 	if err != nil {
 		elog.Println("Error opening serial port: ", err)
 		os.Exit(-1)
@@ -155,29 +159,37 @@ func main() {
 		defer d.Disconnect()
 	}
 
-	if *readram {
-		//ReadRam(mdc, *ramfile, *autoname)
-		elog.Println("readram not implemented")
-	}
+	/*
+		if *readram {
+			//ReadRam(mdc, *ramfile, *autoname)
+			elog.Println("readram not implemented")
+		}
 
-	if *writeram {
-		//WriteRam(mdc, *ramfile)
-		elog.Println("writeram not implemented")
-	}
+		if *writeram {
+			//WriteRam(mdc, *ramfile)
+			elog.Println("writeram not implemented")
+		}
 
-	if *readrom {
-		//ReadRom(mdc, *romfile, *autoname)
-		elog.Println("readrom not implemented")
-	}
+		if *readrom {
+			//ReadRom(mdc, *romfile, *autoname)
+			elog.Println("readrom not implemented")
+		}
 
-	if *writerom {
-		//WriteRom(mdc, *romfile)
-		elog.Println("writerom not implemented")
-	}
+		if *writerom {
+			//WriteRom(mdc, *romfile)
+			elog.Println("writerom not implemented")
+		}
+	*/
 
 	if *rominfo {
-		elog.Println("nothing implemented")
-		//gotromname, _ := mdcart.GetRomName(mdc)
-		//fmt.Println(gotromname)
+		s, err := d.ReadDeviceStatus() // currently prints to stdout
+		if err != nil {
+			elog.Printf("ReadDeviceStatus: %v", err)
+		}
+		fmt.Printf("Device status: %x\n", s)
+		err = d.ReadStatus() // currently prints to stdout
+		if err != nil {
+			elog.Println(err)
+		}
 	}
 }
