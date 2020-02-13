@@ -139,7 +139,7 @@ func (p *Packet) generate_crc16_old() error {
 func (p *Packet) generate_crc16() uint16 {
 	var c uint16
 	for _, v := range p.bytes[:PACKETSIZE-2] {
-		c = (c << 8) ^ crc16_tab[(byte(c>>8)^v&0xFF)]
+		c = (c << 8) ^ crc16_tab[byte(c>>8)^v]
 	}
 	return c
 }
