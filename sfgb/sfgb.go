@@ -36,9 +36,9 @@ func main() {
 	//options
 	port := flag.String("port", "/dev/ttyUSB0", "serial port to use (/dev/ttyUSB0, etc)")
 
-	//serial options, shouldn't be needed
+	baud := flag.Uint("baud", 185000, "Baud rate")
 	/*
-		baud := flag.Uint("baud", 115200, "Baud rate")
+		//serial options, shouldn't be needed
 		even := flag.Bool("even", false, "enable even parity")
 		odd := flag.Bool("odd", false, "enable odd parity")
 		rs485 := flag.Bool("rs485", false, "enable RS485 RTS for direction control")
@@ -50,8 +50,8 @@ func main() {
 		minread := flag.Uint("minread", 0, "Minimum read count")
 	*/
 
-	baud := new(uint)
-	*baud = 115200
+	//baud := new(uint)
+	//*baud = 115200
 	//even := new(bool); *even = false
 	//odd := new(bool); *odd = false
 	parity := serial.PARITY_NONE
@@ -66,7 +66,7 @@ func main() {
 	databits := new(uint)
 	*databits = 8
 	chartimeout := new(uint)
-	*chartimeout = 200
+	*chartimeout = 3000
 	minread := new(uint)
 	*minread = 0
 

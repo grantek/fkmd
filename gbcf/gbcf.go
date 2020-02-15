@@ -304,7 +304,7 @@ func (d *Gbcf) sendPacket(p *Packet) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("debug: sending packet:\n%v\n", b)
+	fmt.Printf("debug: sending packet:\n%x\n", b)
 	n, err := d.fd.Write(p.bytes[:])
 	if err != nil {
 		return err
@@ -352,8 +352,8 @@ func (d *Gbcf) ReadStatus() error {
 		return err
 	}
 	// test values only for Max cart
-	p.bytes[3] = MBC1
-	p.bytes[4] = ALG16
+	//p.bytes[3] = MBC1
+	//p.bytes[4] = ALG16
 
 	if err := d.sendPacket(p); err != nil {
 		return err
