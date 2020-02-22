@@ -63,6 +63,111 @@ var crc16_tab = [256]uint16{
 	0x2E93, 0x3EB2, 0x0ED1, 0x1EF0,
 }
 
+type DeviceStatus struct {
+	/* digits describing version of device soft */
+	ver_11 byte
+	ver_12 byte
+	ver_21 byte
+	ver_22 byte
+	/* flash chip date */
+	manufacturer_id byte
+	//manufacturer  [30]byte
+	chip_id byte
+	bbl     byte // Boot Block Locked
+	/* info about loaded game */
+	logo_correct byte
+	cgb          byte
+	sgb          byte
+	rom_size     byte //[6]byte
+	ram_size     byte //[6]byte
+	crc16        uint16
+	typeID       byte   //typ          [30]byte
+	game_name    string //[17]byte
+}
+
+/* array of producers names and codes */
+var producers = map[byte]string{
+	0x01: "AMD",
+	0x02: "AMI",
+	0xe5: "Analog Devices",
+	0x1f: "Atmel",
+	0x31: "Catalyst",
+	0x34: "Cypress",
+	0x04: "Fujitsu",
+	0xE0: "Goldstar",
+	0x07: "Hitachi",
+	0xad: "Hyundai",
+	0xc1: "Infineon",
+	0x89: "Intel",
+	0xd5: "Intg. Silicon Systems",
+	0xc2: "Macronix",
+	0x29: "Microchip",
+	0x2c: "Micron",
+	0x1c: "Mitsubishi",
+	0x10: "Nec",
+	0x15: "Philips Semiconductors",
+	0xce: "Samsung",
+	0x62: "Sanyo",
+	0x20: "SGS Thomson",
+	0xb0: "Sharp",
+	0xbf: "SST",
+	0x97: "Texas Instruments",
+	0x98: "Toshiba",
+	0xda: "Winbond",
+	0x19: "Xicor",
+	0xc9: "Xilinx",
+}
+
+/* array of cart types - source GB CPU Manual */
+var carts = map[byte]string{
+	0x00: "ROM ONLY",
+	0x01: "ROM+MBC1",
+	0x02: "ROM+MBC1+RAM",
+	0x03: "ROM+MBC1+RAM+BATT",
+	0x05: "ROM+MBC2",
+	0x06: "ROM+MBC2+BATTERY",
+	0x08: "ROM+RAM",
+	0x09: "ROM+RAM+BATTERY",
+	0x11: "ROM+MBC3",
+	0x0b: "ROM+MMMO1",
+	0x0c: "ROM+MMMO1+SRAM",
+	0x0d: "ROM+MMMO1+SRAM+BATT",
+	0x0f: "ROM+MBC3+TIMER+BATT",
+	0x10: "ROM+MBC3+TIMER+RAM+BAT",
+	0x12: "ROM+MBC3+RAM",
+	0x13: "ROM+MBC3+RAM+BATT",
+	0x19: "ROM+MBC5",
+	0x1a: "ROM+MBC5+RAM",
+	0x1b: "ROM+MBC5+RAM+BATT",
+	0x1c: "ROM+MBC5+RUMBLE",
+	0x1d: "ROM+MBC5+RUMBLE+SRAM",
+	0x1e: "ROM+MBC5+RUMBLE+SRAM+BATT",
+	0x1f: "Pocket Camera",
+	0xfd: "Bandai TAMA5",
+	0xfe: "Hudson HuC-3",
+}
+
+var romSizes = map[byte]string{
+	0x00: "32KB",
+	0x01: "64KB",
+	0x02: "128KB",
+	0x03: "256KB",
+	0x04: "512KB",
+	0x05: "1MB",
+	0x06: "2MB",
+	0x52: "1.1MB",
+	0x53: "1.2MB",
+	0x54: "1.5MB",
+}
+
+var ramSizes = map[byte]string{
+	0x00: "0KB",
+	0x01: "2KB",
+	0x02: "8KB",
+	0x03: "32KB",
+	0x04: "128KB",
+}
+
 type Packet struct {
 	//control byte,
 	//command byte,
@@ -165,6 +270,35 @@ func (p *Packet) Serialise() ([]byte, error) {
 		return nil, fmt.Errorf("Serialise: copied %d of %d bytes", n, PACKETSIZE)
 	}
 	return b, nil
+}
+
+func (p *Packet) DeviceStatusShort() *DeviceStatus {
+	ds := &DeviceStatus{}
+	ds.ver_11 = p.bytes[2] / 16
+	ds.ver_12 = p.bytes[2] % 16
+	ds.ver_21 = p.bytes[3] / 16
+	ds.ver_22 = p.bytes[3] % 16
+	ds.manufacturer_id = p.bytes[4]
+	ds.chip_id = p.bytes[5]
+	ds.bbl = p.bytes[6] & 0x01
+	return ds
+}
+
+func (p *Packet) DeviceStatusLong() *DeviceStatus {
+	ds := p.DeviceStatusShort()
+	ds.logo_correct = p.bytes[8]
+	ds.game_name = string(p.bytes[9:25])
+	if p.bytes[24] == 0x80 {
+		ds.cgb = 1
+	}
+	if p.bytes[27] == 0x03 {
+		ds.sgb = 1
+	}
+	ds.typeID = p.bytes[28]
+	ds.rom_size = p.bytes[29]
+	ds.ram_size = p.bytes[30]
+	ds.crc16 = 256*uint16(p.bytes[35]) + uint16(p.bytes[36])
+	return ds
 }
 
 //go:generate stringer -type=ControlByte
@@ -315,59 +449,57 @@ func (d *Gbcf) sendPacket(p *Packet) error {
 	return nil
 }
 
-func (d *Gbcf) ReadDeviceStatus() (byte, error) {
+func (d *Gbcf) ReadDeviceStatus() (*DeviceStatus, error) {
 	p := &Packet{}
 	if err := p.setControl(DATA); err != nil {
-		return 0, err
+		return nil, err
 	}
 	if err := p.setCommand(STATUS); err != nil {
-		return 0, err
+		return nil, err
 	}
 	if err := p.setSubcommand(NREAD_ID); err != nil {
-		return 0, err
+		return nil, err
 	}
-	// mbc, algorithm = 0
+	// mbc, algorithm = nil
 	if err := d.sendPacket(p); err != nil {
-		return 0, err
+		return nil, err
 	}
 	p, err := d.receive_packet()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	if err := p.check_packet(); err == nil {
-		return 0, errors.New("Received full packet when checking device status")
+		return nil, errors.New("Received full packet when checking device status")
 	}
-	return p.bytes[0], nil
+	return p.DeviceStatusShort(), nil
 }
 
-func (d *Gbcf) ReadStatus() error {
+func (d *Gbcf) ReadStatus() (*DeviceStatus, error) { // CartStatus?
 	p := &Packet{}
 	if err := p.setControl(DATA); err != nil {
-		return err
+		return nil, err
 	}
 	if err := p.setCommand(STATUS); err != nil {
-		return err
+		return nil, err
 	}
 	if err := p.setSubcommand(READ_ID); err != nil {
-		return err
+		return nil, err
 	}
 	// test values only for Max cart
 	//p.bytes[3] = MBC1
 	//p.bytes[4] = ALG16
 
 	if err := d.sendPacket(p); err != nil {
-		return err
+		return nil, err
 	}
 	p, err := d.receive_packet()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	/*if err := p.check_packet(); err != nil {
 		return err
 	}*/
-	fmt.Println("Received packet:")
-	fmt.Printf("%v\n", p.bytes)
-	return nil
+	return p.DeviceStatusLong(), nil
 }
 
 /*

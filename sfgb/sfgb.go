@@ -182,14 +182,15 @@ func main() {
 	*/
 
 	if *rominfo {
-		s, err := d.ReadDeviceStatus() // currently prints to stdout
+		ds, err := d.ReadDeviceStatus()
 		if err != nil {
 			elog.Printf("ReadDeviceStatus: %v", err)
 		}
-		fmt.Printf("Device status: %x\n", s)
-		err = d.ReadStatus() // currently prints to stdout
+		fmt.Printf("Device status: %v\n", ds)
+		ds, err = d.ReadStatus()
 		if err != nil {
 			elog.Println(err)
 		}
+		fmt.Printf("Full status: %v\n", ds)
 	}
 }
