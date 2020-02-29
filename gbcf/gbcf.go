@@ -65,24 +65,24 @@ var crc16_tab = [256]uint16{
 
 type DeviceStatus struct {
 	/* digits describing version of device soft */
-	ver_11 byte
-	ver_12 byte
-	ver_21 byte
-	ver_22 byte
+	Ver11 byte
+	Ver12 byte
+	Ver21 byte
+	Ver22 byte
 	/* flash chip date */
-	manufacturer_id byte
+	ManufacturerID byte
 	//manufacturer  [30]byte
-	chip_id byte
-	bbl     byte // Boot Block Locked
+	ChipID byte
+	BBL    byte // Boot Block Locked
 	/* info about loaded game */
-	logo_correct byte
-	cgb          byte
-	sgb          byte
-	rom_size     byte //[6]byte
-	ram_size     byte //[6]byte
-	crc16        uint16
-	typeID       byte   //typ          [30]byte
-	game_name    string //[17]byte
+	LogoCorrect byte
+	CGB         byte
+	SGB         byte
+	ROMSize     byte //[6]byte
+	RAMSize     byte //[6]byte
+	CRC16       uint16
+	TypeID      byte   //typ          [30]byte
+	GameName    string //[17]byte
 }
 
 /* array of producers names and codes */
@@ -274,30 +274,30 @@ func (p *Packet) Serialise() ([]byte, error) {
 
 func (p *Packet) DeviceStatusShort() *DeviceStatus {
 	ds := &DeviceStatus{}
-	ds.ver_11 = p.bytes[2] / 16
-	ds.ver_12 = p.bytes[2] % 16
-	ds.ver_21 = p.bytes[3] / 16
-	ds.ver_22 = p.bytes[3] % 16
-	ds.manufacturer_id = p.bytes[4]
-	ds.chip_id = p.bytes[5]
-	ds.bbl = p.bytes[6] & 0x01
+	ds.Ver11 = p.bytes[2] / 16
+	ds.Ver12 = p.bytes[2] % 16
+	ds.Ver21 = p.bytes[3] / 16
+	ds.Ver22 = p.bytes[3] % 16
+	ds.ManufacturerID = p.bytes[4]
+	ds.ChipID = p.bytes[5]
+	ds.BBL = p.bytes[6] & 0x01
 	return ds
 }
 
 func (p *Packet) DeviceStatusLong() *DeviceStatus {
 	ds := p.DeviceStatusShort()
-	ds.logo_correct = p.bytes[8]
-	ds.game_name = string(p.bytes[9:25])
+	ds.LogoCorrect = p.bytes[8]
+	ds.GameName = string(p.bytes[9:25])
 	if p.bytes[24] == 0x80 {
-		ds.cgb = 1
+		ds.CGB = 1
 	}
 	if p.bytes[27] == 0x03 {
-		ds.sgb = 1
+		ds.SGB = 1
 	}
-	ds.typeID = p.bytes[28]
-	ds.rom_size = p.bytes[29]
-	ds.ram_size = p.bytes[30]
-	ds.crc16 = 256*uint16(p.bytes[35]) + uint16(p.bytes[36])
+	ds.TypeID = p.bytes[28]
+	ds.ROMSize = p.bytes[29]
+	ds.RAMSize = p.bytes[30]
+	ds.CRC16 = 256*uint16(p.bytes[35]) + uint16(p.bytes[36])
 	return ds
 }
 

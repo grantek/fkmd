@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	//"io"
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"os"
@@ -186,11 +187,21 @@ func main() {
 		if err != nil {
 			elog.Printf("ReadDeviceStatus: %v", err)
 		}
-		fmt.Printf("Device status: %v\n", ds)
+		fmt.Println("Device status:")
+		b, err := json.MarshalIndent(ds, "", "  ")
+		if err != nil {
+			fmt.Println("MarshallIndent: ", err)
+		}
+		fmt.Println(string(b))
 		ds, err = d.ReadStatus()
 		if err != nil {
 			elog.Println(err)
 		}
-		fmt.Printf("Full status: %v\n", ds)
+		fmt.Println("Full status:")
+		b, err = json.MarshalIndent(ds, "", "  ")
+		if err != nil {
+			fmt.Println("MarshallIndent: ", err)
+		}
+		fmt.Println(string(b))
 	}
 }
