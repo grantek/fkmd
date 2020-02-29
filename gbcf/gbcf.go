@@ -10,7 +10,6 @@ import (
 	"time"
 	//"github.com/grantek/fkmd/gbcart"
 	"github.com/grantek/fkmd/memcart"
-	"github.com/howeyc/crc16"
 	"github.com/jacobsa/go-serial/serial"
 )
 
@@ -69,11 +68,10 @@ type DeviceStatus struct {
 	Ver12 byte
 	Ver21 byte
 	Ver22 byte
-	/* flash chip date */
+	/* flash chip data */
 	ManufacturerID byte
-	//manufacturer  [30]byte
-	ChipID byte
-	BBL    byte // Boot Block Locked
+	ChipID         byte
+	BBL            byte // Boot Block Locked
 	/* info about loaded game */
 	LogoCorrect byte
 	CGB         byte
@@ -83,6 +81,20 @@ type DeviceStatus struct {
 	CRC16       uint16
 	TypeID      byte   //typ          [30]byte
 	GameName    string //[17]byte
+}
+
+type GBCartInfo struct {
+	Manufacturer string
+	ChipID       byte
+	BBL          bool
+	LogoCorrect  bool
+	CGB          bool
+	SGB          bool
+	ROMSize      string
+	RAMSize      string
+	CRC16        uint16
+	CartType     string
+	GameName     string
 }
 
 /* array of producers names and codes */
@@ -234,13 +246,6 @@ original source defines its own crc16 function.
 - the initial CRC is 0x0000, as in CRC16-CCITT
 - the function hashes the bytes of the packet and returns a short
 */
-func (p *Packet) generate_crc16_old() error {
-	// TODO: add validation and return error if invalid
-	c := crc16.Checksum(p.bytes[:PACKETSIZE-2], crc16.CCITTFalseTable)
-	p.bytes[PACKETSIZE-2] = byte(c / 256)
-	p.bytes[PACKETSIZE-1] = byte(c % 256)
-	return nil
-}
 func (p *Packet) generate_crc16() uint16 {
 	var c uint16
 	for _, v := range p.bytes[:PACKETSIZE-2] {
@@ -253,7 +258,7 @@ func (p *Packet) check_packet() error {
 	if ControlByte(p.bytes[0]) != DATA {
 		return errors.New("Packet is not marked as DATA type.")
 	}
-	c := crc16.ChecksumCCITTFalse(p.bytes[:PACKETSIZE-2])
+	c := p.generate_crc16()
 	if p.bytes[PACKETSIZE-2] != byte(c/256) ||
 		p.bytes[PACKETSIZE-1] != byte(c%256) {
 		return errors.New("CRC error in received packet.")
@@ -432,13 +437,11 @@ func (d *Gbcf) Disconnect() error {
 	return e
 }
 
-// Note: original driver always sends fixed PACKETSIZE packets
 func (d *Gbcf) sendPacket(p *Packet) error {
 	b, err := p.Serialise()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("debug: sending packet:\n%x\n", b)
 	n, err := d.fd.Write(p.bytes[:])
 	if err != nil {
 		return err
@@ -468,8 +471,8 @@ func (d *Gbcf) ReadDeviceStatus() (*DeviceStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := p.check_packet(); err == nil {
-		return nil, errors.New("Received full packet when checking device status")
+	if err := p.check_packet(); err != nil {
+		return nil, err
 	}
 	return p.DeviceStatusShort(), nil
 }
@@ -485,9 +488,6 @@ func (d *Gbcf) ReadStatus() (*DeviceStatus, error) { // CartStatus?
 	if err := p.setSubcommand(READ_ID); err != nil {
 		return nil, err
 	}
-	// test values only for Max cart
-	//p.bytes[3] = MBC1
-	//p.bytes[4] = ALG16
 
 	if err := d.sendPacket(p); err != nil {
 		return nil, err
@@ -496,10 +496,34 @@ func (d *Gbcf) ReadStatus() (*DeviceStatus, error) { // CartStatus?
 	if err != nil {
 		return nil, err
 	}
-	/*if err := p.check_packet(); err != nil {
-		return err
-	}*/
+	if err := p.check_packet(); err != nil {
+		return nil, err
+	}
 	return p.DeviceStatusLong(), nil
+}
+
+func (d *Gbcf) GBCartInfo() (*GBCartInfo, error) {
+	ds, err := d.ReadStatus()
+	if err != nil {
+		return nil, err
+	}
+	return ds.GBCartInfo(), nil
+}
+
+func (ds *DeviceStatus) GBCartInfo() *GBCartInfo {
+	g := &GBCartInfo{}
+	g.Manufacturer = producers[ds.ManufacturerID]
+	g.LogoCorrect = ds.LogoCorrect != 0
+	g.ChipID = ds.ChipID
+	g.CartType = carts[ds.TypeID]
+	g.BBL = ds.BBL != 0
+	g.CGB = ds.CGB != 0
+	g.SGB = ds.SGB != 0
+	g.CRC16 = ds.CRC16
+	g.GameName = ds.GameName[:strings.Index(ds.GameName, "\x00")]
+	g.ROMSize = romSizes[ds.ROMSize]
+	g.RAMSize = ramSizes[ds.RAMSize]
+	return g
 }
 
 /*

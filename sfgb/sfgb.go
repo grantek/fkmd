@@ -193,12 +193,12 @@ func main() {
 			fmt.Println("MarshallIndent: ", err)
 		}
 		fmt.Println(string(b))
-		ds, err = d.ReadStatus()
+		ci, err := d.GBCartInfo()
 		if err != nil {
 			elog.Println(err)
 		}
 		fmt.Println("Full status:")
-		b, err = json.MarshalIndent(ds, "", "  ")
+		b, err = json.MarshalIndent(ci, "", "  ")
 		if err != nil {
 			fmt.Println("MarshallIndent: ", err)
 		}
