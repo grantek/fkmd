@@ -62,12 +62,17 @@ var crc16_tab = [256]uint16{
 	0x2E93, 0x3EB2, 0x0ED1, 0x1EF0,
 }
 
-type DeviceStatus struct {
+// FirmwareVersion represents the device version sent by STATUS(NREAD_ID)
+type FirmwareVersion struct {
 	/* digits describing version of device soft */
 	Ver11 byte
 	Ver12 byte
 	Ver21 byte
 	Ver22 byte
+}
+
+// DeviceCartInfo stores the cart-related parts of STATUS(READ_ID)
+type DeviceCartInfo struct {
 	/* flash chip data */
 	ManufacturerID byte
 	ChipID         byte
@@ -83,6 +88,7 @@ type DeviceStatus struct {
 	GameName    string //[17]byte
 }
 
+// GBCartInfo is human-readable version of DeviceCartInfo
 type GBCartInfo struct {
 	Manufacturer string
 	ChipID       byte
@@ -277,33 +283,35 @@ func (p *Packet) Serialise() ([]byte, error) {
 	return b, nil
 }
 
-func (p *Packet) DeviceStatusShort() *DeviceStatus {
-	ds := &DeviceStatus{}
-	ds.Ver11 = p.bytes[2] / 16
-	ds.Ver12 = p.bytes[2] % 16
-	ds.Ver21 = p.bytes[3] / 16
-	ds.Ver22 = p.bytes[3] % 16
-	ds.ManufacturerID = p.bytes[4]
-	ds.ChipID = p.bytes[5]
-	ds.BBL = p.bytes[6] & 0x01
-	return ds
+// DeviceStatusShort parses a STATUS(NREAD_ID) packet into a *FirmwareVersion.
+func (p *Packet) DeviceStatusShort() *FirmwareVersion {
+	fw := &FirmwareVersion{}
+	fw.Ver11 = p.bytes[2] / 16
+	fw.Ver12 = p.bytes[2] % 16
+	fw.Ver21 = p.bytes[3] / 16
+	fw.Ver22 = p.bytes[3] % 16
+	return fw
 }
 
-func (p *Packet) DeviceStatusLong() *DeviceStatus {
-	ds := p.DeviceStatusShort()
-	ds.LogoCorrect = p.bytes[8]
-	ds.GameName = string(p.bytes[9:25])
+func (p *Packet) DeviceStatusLong() (*FirmwareVersion, *DeviceCartInfo) {
+	fw := p.DeviceStatusShort()
+	dci := &DeviceCartInfo{}
+	dci.ManufacturerID = p.bytes[4]
+	dci.ChipID = p.bytes[5]
+	dci.BBL = p.bytes[6] & 0x01
+	dci.LogoCorrect = p.bytes[8]
+	dci.GameName = string(p.bytes[9:25])
 	if p.bytes[24] == 0x80 {
-		ds.CGB = 1
+		dci.CGB = 1
 	}
 	if p.bytes[27] == 0x03 {
-		ds.SGB = 1
+		dci.SGB = 1
 	}
-	ds.TypeID = p.bytes[28]
-	ds.ROMSize = p.bytes[29]
-	ds.RAMSize = p.bytes[30]
-	ds.CRC16 = 256*uint16(p.bytes[35]) + uint16(p.bytes[36])
-	return ds
+	dci.TypeID = p.bytes[28]
+	dci.ROMSize = p.bytes[29]
+	dci.RAMSize = p.bytes[30]
+	dci.CRC16 = 256*uint16(p.bytes[35]) + uint16(p.bytes[36])
+	return fw, dci
 }
 
 //go:generate stringer -type=ControlByte
@@ -452,7 +460,7 @@ func (d *Gbcf) sendPacket(p *Packet) error {
 	return nil
 }
 
-func (d *Gbcf) ReadDeviceStatus() (*DeviceStatus, error) {
+func (d *Gbcf) ReadDeviceStatus() (*FirmwareVersion, error) {
 	p := &Packet{}
 	if err := p.setControl(DATA); err != nil {
 		return nil, err
@@ -477,52 +485,53 @@ func (d *Gbcf) ReadDeviceStatus() (*DeviceStatus, error) {
 	return p.DeviceStatusShort(), nil
 }
 
-func (d *Gbcf) ReadStatus() (*DeviceStatus, error) { // CartStatus?
+func (d *Gbcf) ReadStatus() (*FirmwareVersion, *DeviceCartInfo, error) {
 	p := &Packet{}
 	if err := p.setControl(DATA); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := p.setCommand(STATUS); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := p.setSubcommand(READ_ID); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := d.sendPacket(p); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	p, err := d.receive_packet()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := p.check_packet(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return p.DeviceStatusLong(), nil
+	fw, dci := p.DeviceStatusLong()
+	return fw, dci, nil
 }
 
 func (d *Gbcf) GBCartInfo() (*GBCartInfo, error) {
-	ds, err := d.ReadStatus()
+	_, dci, err := d.ReadStatus()
 	if err != nil {
 		return nil, err
 	}
-	return ds.GBCartInfo(), nil
+	return dci.GBCartInfo(), nil
 }
 
-func (ds *DeviceStatus) GBCartInfo() *GBCartInfo {
+func (dci *DeviceCartInfo) GBCartInfo() *GBCartInfo {
 	g := &GBCartInfo{}
-	g.Manufacturer = producers[ds.ManufacturerID]
-	g.LogoCorrect = ds.LogoCorrect != 0
-	g.ChipID = ds.ChipID
-	g.CartType = carts[ds.TypeID]
-	g.BBL = ds.BBL != 0
-	g.CGB = ds.CGB != 0
-	g.SGB = ds.SGB != 0
-	g.CRC16 = ds.CRC16
-	g.GameName = ds.GameName[:strings.Index(ds.GameName, "\x00")]
-	g.ROMSize = romSizes[ds.ROMSize]
-	g.RAMSize = ramSizes[ds.RAMSize]
+	g.Manufacturer = producers[dci.ManufacturerID]
+	g.LogoCorrect = dci.LogoCorrect != 0
+	g.ChipID = dci.ChipID
+	g.CartType = carts[dci.TypeID]
+	g.BBL = dci.BBL != 0
+	g.CGB = dci.CGB != 0
+	g.SGB = dci.SGB != 0
+	g.CRC16 = dci.CRC16
+	g.GameName = dci.GameName[:strings.Index(dci.GameName, "\x00")]
+	g.ROMSize = romSizes[dci.ROMSize]
+	g.RAMSize = ramSizes[dci.RAMSize]
 	return g
 }
 

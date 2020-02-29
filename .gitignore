@@ -5,5 +5,7 @@
 *.sram
 *.fram
 fkmd
+sfgb/sfgb
+sfmd/sfmd
 local
 

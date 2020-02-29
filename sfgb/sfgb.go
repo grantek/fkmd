@@ -197,7 +197,7 @@ func main() {
 		if err != nil {
 			elog.Println(err)
 		}
-		fmt.Println("Full status:")
+		fmt.Println("Cart status:")
 		b, err = json.MarshalIndent(ci, "", "  ")
 		if err != nil {
 			fmt.Println("MarshallIndent: ", err)
