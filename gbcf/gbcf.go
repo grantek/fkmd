@@ -245,26 +245,26 @@ func (p *Packet) setSubcommand(scb SubcommandByte) error {
 	return nil
 }
 
-/*
-generate_crc16:
-original source defines its own crc16 function.
-- the predefined table matches CRC16-CCITT-FALSE
-- the initial CRC is 0x0000, as in CRC16-CCITT
-- the function hashes the bytes of the packet and returns a short
-*/
-func (p *Packet) generate_crc16() uint16 {
+// CRC16 returns the CRC16 of a packet.
+// Original source defines its own crc16 function.
+// - the predefined table matches CRC16-CCITT-FALSE
+// - the initial CRC is 0x0000, as in CRC16-CCITT
+// - the function hashes the bytes of the packet and returns a short
+func (p *Packet) CRC16() uint16 {
 	var c uint16
 	for _, v := range p.bytes[:PACKETSIZE-2] {
 		c = (c << 8) ^ crc16_tab[byte(c>>8)^v]
 	}
 	return c
 }
-func (p *Packet) check_packet() error {
+
+// Check performs some validation on a received packet.
+func (p *Packet) Check() error {
 	//TODO: move this to separate validation logic
 	if ControlByte(p.bytes[0]) != DATA {
 		return errors.New("Packet is not marked as DATA type.")
 	}
-	c := p.generate_crc16()
+	c := p.CRC16()
 	if p.bytes[PACKETSIZE-2] != byte(c/256) ||
 		p.bytes[PACKETSIZE-1] != byte(c%256) {
 		return errors.New("CRC error in received packet.")
@@ -273,7 +273,7 @@ func (p *Packet) check_packet() error {
 }
 
 func (p *Packet) Serialise() ([]byte, error) {
-	c := p.generate_crc16()
+	c := p.CRC16()
 	p.bytes[PACKETSIZE-2] = byte(c / 256)
 	p.bytes[PACKETSIZE-1] = byte(c % 256)
 	b := make([]byte, PACKETSIZE)
@@ -335,7 +335,7 @@ const (
 	//VER            = "1.1" // not used in protocol
 )
 const (
-	//enum error_t
+	//enum error_t (signed char)
 	TIMEOUT     = -1
 	FILEERROR_O = -2
 	FILEERROR_W = -3
@@ -386,16 +386,16 @@ const (
 	ALG16 = 0x00
 	ALG12 = 0x01
 
-	// enum dap_t
-	LONGER   = 0x00
-	DEFAULT  = 0x01
-	DATAPOLL = 0x02
-	TOGGLE   = 0x03
+	// enum dap_t, unreferenced in original code.
+	// LONGER   = 0x00
+	// DEFAULT  = 0x01
+	// DATAPOLL = 0x02
+	// TOGGLE   = 0x03 // Default
 
-	// speed_type
-	LOW      = 0x00
-	STANDARD = 0x01
-	HIGH     = 0x02
+	// speed_type, appears to be local to original code.
+	// LOW      = 0x00 // 125000 baud
+	// STANDARD = 0x01 // 185000 baud, default
+	// HIGH     = 0x02 // 375000 baud
 
 	// enum mbc_t
 	MBCAUTO = 0x00
@@ -475,11 +475,11 @@ func (d *Gbcf) ReadDeviceStatus() (*FirmwareVersion, error) {
 	if err := d.sendPacket(p); err != nil {
 		return nil, err
 	}
-	p, err := d.receive_packet()
+	p, err := d.receivePacket()
 	if err != nil {
 		return nil, err
 	}
-	if err := p.check_packet(); err != nil {
+	if err := p.Check(); err != nil {
 		return nil, err
 	}
 	return p.DeviceStatusShort(), nil
@@ -500,11 +500,11 @@ func (d *Gbcf) ReadStatus() (*FirmwareVersion, *DeviceCartInfo, error) {
 	if err := d.sendPacket(p); err != nil {
 		return nil, nil, err
 	}
-	p, err := d.receive_packet()
+	p, err := d.receivePacket()
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := p.check_packet(); err != nil {
+	if err := p.Check(); err != nil {
 		return nil, nil, err
 	}
 	fw, dci := p.DeviceStatusLong()
@@ -551,7 +551,7 @@ func (d *Gbcf) receive_char() (byte, error) {
 */
 
 // Receive a Packet
-func (d *Gbcf) receive_packet() (*Packet, error) {
+func (d *Gbcf) receivePacket() (*Packet, error) {
 	p := &Packet{}
 	n, err := d.fd.Read(p.bytes[:1])
 	if err != nil {
