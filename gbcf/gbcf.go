@@ -131,30 +131,26 @@ type Packet struct {
 	bytes [PACKETSIZE]byte
 }
 
-// setControl sets the control byte for the packet type.
-// It relies on the stringer tool to generate the list of valid values.
-func (p *Packet) setControl(cb ControlByte) error {
-	// generated function returns "%T(%d)" for unknown values
-	if strings.HasPrefix(cb.String(), "ControlByte") {
-		return fmt.Errorf("Invalid control character for packet: %X", cb)
-	}
-	p.bytes[0] = byte(cb)
-	return nil
+type PacketConfig struct {
+	Control    ControlByte
+	Command    CommandByte
+	Subcommand SubcommandByte
+	Algorithm  byte
+	MBC        byte
 }
 
-// setCommand sets the command byte for packets of type DATA.
-// It relies on the stringer tool to generate the list of valid values.
-func (p *Packet) setCommand(cb CommandByte) error {
-	// generated function returns "%T(%d)" for unknown values
-	if strings.HasPrefix(cb.String(), "CommandByte") {
-		return fmt.Errorf("Invalid command character for packet: %X", cb)
+// Packet validates the PacketConfig and returns a Packet.
+func (pc *PacketConfig) Packet() (*Packet, error) {
+	p := &Packet{}
+	// generated functions return "%T(%d)" for unknown values
+	if strings.HasPrefix(pc.Control.String(), "ControlByte") {
+		return nil, fmt.Errorf("Invalid control character for packet: %X", pc.Control)
 	}
-	p.bytes[1] = byte(cb)
-	return nil
-}
-
-// setSubcommand sets the subcommand byte for packets of type DATA.
-func (p *Packet) setSubcommand(scb SubcommandByte) error {
+	p.bytes[0] = byte(pc.Control)
+	if strings.HasPrefix(pc.Command.String(), "CommandByte") {
+		return nil, fmt.Errorf("Invalid command character for packet: %X", pc.Command)
+	}
+	p.bytes[1] = byte(pc.Command)
 	// Subcommand values have a rango of 0 to N-1 for commands with N subcommands.
 	var n int
 	cb := CommandByte(p.bytes[1])
@@ -172,11 +168,11 @@ func (p *Packet) setSubcommand(scb SubcommandByte) error {
 	default:
 		n = 1 // allow zeroing of packet
 	}
-	if int(scb) >= n {
-		return fmt.Errorf("Subcommand value %d is invalid for %s.", scb, cb.String())
+	if int(pc.Subcommand) >= n {
+		return nil, fmt.Errorf("Subcommand value %d is invalid for %s.", pc.Subcommand, cb.String())
 	}
-	p.bytes[2] = byte(scb)
-	return nil
+	p.bytes[2] = byte(pc.Subcommand)
+	return p, nil
 }
 
 // CRC16 returns the CRC16 of a packet.
@@ -206,7 +202,8 @@ func (p *Packet) Check() error {
 	return nil
 }
 
-func (p *Packet) Serialise() ([]byte, error) {
+// Byte returns a copy of the Packet bytes, with CRC filled in.
+func (p *Packet) Bytes() ([]byte, error) {
 	c := p.CRC16()
 	p.bytes[PACKETSIZE-2] = byte(c / 256)
 	p.bytes[PACKETSIZE-1] = byte(c % 256)
@@ -379,8 +376,9 @@ func (d *GBCF) Disconnect() error {
 	return e
 }
 
-func (d *GBCF) sendPacket(p *Packet) error {
-	b, err := p.Serialise()
+// SendPacket sends a packet.
+func (d *GBCF) SendPacket(p *Packet) error {
+	b, err := p.Bytes()
 	if err != nil {
 		return err
 	}
@@ -395,21 +393,21 @@ func (d *GBCF) sendPacket(p *Packet) error {
 }
 
 func (d *GBCF) ReadDeviceStatus() (*FirmwareVersion, error) {
-	p := &Packet{}
-	if err := p.setControl(DATA); err != nil {
+	pc := &PacketConfig{
+		Control:    DATA,
+		Command:    STATUS,
+		Subcommand: NREAD_ID,
+		Algorithm:  ALG16,
+		MBC:        MBCAUTO,
+	}
+	p, err := pc.Packet()
+	if err != nil {
 		return nil, err
 	}
-	if err := p.setCommand(STATUS); err != nil {
+	if err := d.SendPacket(p); err != nil {
 		return nil, err
 	}
-	if err := p.setSubcommand(NREAD_ID); err != nil {
-		return nil, err
-	}
-	// mbc, algorithm = nil
-	if err := d.sendPacket(p); err != nil {
-		return nil, err
-	}
-	p, err := d.receivePacket()
+	p, err = d.ReceivePacket()
 	if err != nil {
 		return nil, err
 	}
@@ -420,21 +418,21 @@ func (d *GBCF) ReadDeviceStatus() (*FirmwareVersion, error) {
 }
 
 func (d *GBCF) ReadStatus() (*FirmwareVersion, *DeviceCartInfo, error) {
-	p := &Packet{}
-	if err := p.setControl(DATA); err != nil {
+	pc := &PacketConfig{
+		Control:    DATA,
+		Command:    STATUS,
+		Subcommand: READ_ID,
+		Algorithm:  ALG16,
+		MBC:        MBCAUTO,
+	}
+	p, err := pc.Packet()
+	if err != nil {
 		return nil, nil, err
 	}
-	if err := p.setCommand(STATUS); err != nil {
+	if err := d.SendPacket(p); err != nil {
 		return nil, nil, err
 	}
-	if err := p.setSubcommand(READ_ID); err != nil {
-		return nil, nil, err
-	}
-
-	if err := d.sendPacket(p); err != nil {
-		return nil, nil, err
-	}
-	p, err := d.receivePacket()
+	p, err = d.ReceivePacket()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -484,8 +482,8 @@ func (d *GBCF) receive_char() (byte, error) {
 }
 */
 
-// Receive a Packet
-func (d *GBCF) receivePacket() (*Packet, error) {
+// ReceivePacket receives a Packet
+func (d *GBCF) ReceivePacket() (*Packet, error) {
 	p := &Packet{}
 	n, err := d.fd.Read(p.bytes[:1])
 	if err != nil {
@@ -507,6 +505,10 @@ func (d *GBCF) receivePacket() (*Packet, error) {
 	return p, nil
 }
 
+func (d *GBCF) readRAM([]byte, error) {
+
+}
+
 /* from fkmd:
 //Perform some initialisation and verify device ID, as per vendor driver
 //Requires Connect()
@@ -517,7 +519,7 @@ func (d *GBCF) Handshake() error {
 		return err
 	}
 
-	if (id&0xff) == (id>>8) && id != 0 {
+	if (id&0xff) == (id>>8) && id != 0 {1G
 		//vendor driver doesn't close and reopen
 		d.fd.Close()
 		//port.WriteTimeout = 2000;
