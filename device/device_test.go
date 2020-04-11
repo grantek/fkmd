@@ -40,7 +40,7 @@ func CompReadWord(t *testing.T, addr int64) {
 	file_word |= uint16(file_word_bytes[1])
 
 	if file_word != device_word {
-		t.Log("expected %x, device returned %x", file_word, device_word)
+		t.Logf("expected %x, device returned %x", file_word, device_word)
 		t.Fail()
 	}
 }
@@ -79,7 +79,7 @@ func usage() {
 
 func setup(m *testing.M) int {
 	port := flag.String("port", "/dev/ttyUSB0", "serial port to use (/dev/ttyUSB0, etc)")
-	mockfile := flag.String("mockfile", "", "expected ROM dump from device")
+	testfile := flag.String("testfile", "", "expected ROM dump from device")
 	baud := new(uint)
 	*baud = 9600
 	//even := new(bool); *even = false
@@ -107,8 +107,8 @@ func setup(m *testing.M) int {
 		usage()
 	}
 
-	if *mockfile == "" {
-		fmt.Println("Must specify port")
+	if *testfile == "" {
+		fmt.Println("Must specify testfile")
 		usage()
 	}
 
@@ -136,10 +136,10 @@ func setup(m *testing.M) int {
 		defer d.Disconnect()
 	}
 
-	mf, err = os.Open(*mockfile)
+	mf, err = os.Open(*testfile)
 
 	if err != nil {
-		fmt.Println("Error opening mock file: ", err)
+		fmt.Println("Error opening test file: ", err)
 		return -1
 	} else {
 		defer mf.Close()
@@ -219,7 +219,7 @@ func TestFullRead(t *testing.T) {
 		}
 	}
 	if romlen == 0 {
-		t.Fatal("Read 0 bytes from mock file")
+		t.Fatal("Read 0 bytes from test file")
 	}
 	t.Log("Read and matched", romlen, "bytes")
 

@@ -26,19 +26,19 @@ func setup(m *testing.M) int {
 		f    *os.File
 		mrom *memcart_mock.MockMemBank
 	)
-	mockfile := flag.String("mockfile", "", "expected ROM dump from device")
+	testfile := flag.String("testfile", "", "expected ROM dump from device")
 	flag.Parse()
-	if *mockfile == "" {
+	if *testfile == "" {
 		usage()
 	}
-	fi, err = os.Stat(*mockfile)
+	fi, err = os.Stat(*testfile)
 	if err != nil {
 		panic(err)
 	}
 	if fi.Size() < 512 {
-		panic(fmt.Sprintf("Small file for MockMemBank: minimum 512, file \"%s\" detected as %d bytes", mockfile, fi.Size()))
+		panic(fmt.Sprintf("Small file for MockMemBank: minimum 512, file \"%s\" detected as %d bytes", *testfile, fi.Size()))
 	}
-	f, err = os.OpenFile(*mockfile, os.O_RDWR, 0600)
+	f, err = os.OpenFile(*testfile, os.O_RDWR, 0600)
 	if err != nil {
 		panic(err)
 	} else {

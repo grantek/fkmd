@@ -239,13 +239,13 @@ func WriteRom(d *device.Device, romfile string) error {
 
 	fmt.Printf("Read %d bytes from %s\n", romsize, romfile)
 	if romsize%2 == 1 {
-		fmt.Printf("Warning: file size in bytes is odd\n", cart.MAX_ROM_SIZE, romsize)
+		fmt.Println("Warning: file size in bytes is odd")
 		filebuf = append(filebuf, 0)
 		romsize++
 	}
 
 	if romsize > cart.MAX_ROM_SIZE {
-		fmt.Printf("Warning: Max ROM data size is %x cropping input\n", cart.MAX_ROM_SIZE, romsize)
+		fmt.Printf("Warning: Max ROM data size is %x have %x", cart.MAX_ROM_SIZE, romsize)
 		romsize = cart.MAX_ROM_SIZE
 	}
 
