@@ -85,5 +85,4 @@ Usage of fkmd:
 - github.com/jacobsa/go-serial
 
 gbcf:
-- github.com/howeyc/crc16
 - go tools (golang.org/x/tools/cmd/stringer)
