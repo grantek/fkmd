@@ -147,7 +147,7 @@ func main() {
 		Rs485RtsHighAfterSend:  *rs485HighAfterSend,
 	}
 
-	var d = &gbcf.Gbcf{}
+	var d = &gbcf.GBCF{}
 	d.SetOptions(options)
 	//var mdc memcart.MemCart
 	//mdc, err = d.MemCart()

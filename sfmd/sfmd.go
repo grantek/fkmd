@@ -57,7 +57,7 @@ func ReadRom(mdc memcart.MemCart, romfile string, autoname bool) {
 	if err != nil {
 		panic(err)
 	}
-	mdr = mdc.GetCurrentBank()
+	mdr = mdc.CurrentBank()
 	if romfile == "-" {
 		f = os.Stdout
 	} else {
@@ -69,7 +69,7 @@ func ReadRom(mdc memcart.MemCart, romfile string, autoname bool) {
 		defer f.Close()
 	}
 
-	romsize = mdr.GetSize()
+	romsize = mdr.Size()
 	mdr.Seek(0, io.SeekStart)
 	buf := make([]byte, blocksize)
 	for n = 0; n < romsize; n += blocksize {
@@ -100,7 +100,7 @@ func ReadRam(mdc memcart.MemCart, ramfile string, autoname bool) {
 		panic(err)
 	}
 
-	mdr = mdc.GetCurrentBank()
+	mdr = mdc.CurrentBank()
 	if mdr == nil {
 		panic("Current Bank is nil")
 	}
@@ -120,7 +120,7 @@ func ReadRam(mdc memcart.MemCart, ramfile string, autoname bool) {
 		defer f.Close()
 	}
 
-	ramsize := mdr.GetSize()
+	ramsize := mdr.Size()
 	buf := make([]byte, ramsize)
 
 	for n < int(ramsize) {
@@ -146,7 +146,7 @@ func WriteRam(mdc memcart.MemCart, ramfile string) {
 		panic("RAM not detected on cartridge for writing")
 	}
 	mdc.SwitchBank(1)
-	mdr := mdc.GetCurrentBank()
+	mdr := mdc.CurrentBank()
 
 	if ramfile == "-" {
 		f = os.Stdin
@@ -171,7 +171,7 @@ func WriteRam(mdc memcart.MemCart, ramfile string) {
 	if n < len(ram) {
 		elog.Printf("WARNING: wrote %d bytes, input is %d bytes.\n", n, len(ram))
 	}
-	if int64(n) < mdr.GetSize() {
+	if int64(n) < mdr.Size() {
 		elog.Printf("WARNING: wrote %d bytes, cartridge RAM is %d bytes.\n", n, len(ram))
 	}
 	ilog.Println("Verify...")
@@ -241,7 +241,7 @@ func WriteRom(mdc memcart.MemCart, romfile string) error {
 	}
 
 	mdc.SwitchBank(0)
-	mdr := mdc.GetCurrentBank()
+	mdr := mdc.CurrentBank()
 
 	//Going to rely on Write() performing block erasure
 	ilog.Println("Flash write...")

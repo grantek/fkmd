@@ -509,6 +509,24 @@ func (d *GBCF) readRAM([]byte, error) {
 
 }
 
+type GBCartRAM struct {
+	d          *GBCF
+	addressCur int64
+	size       int64
+}
+
+func (m *GBCartRAM) Name() string {
+	return "gbcartram"
+}
+
+func (m *GBCartRAM) Size() int64 {
+	return m.size
+}
+
+func (m *GBCartRAM) AlwaysWritable() bool {
+	return true
+}
+
 /* from fkmd:
 //Perform some initialisation and verify device ID, as per vendor driver
 //Requires Connect()

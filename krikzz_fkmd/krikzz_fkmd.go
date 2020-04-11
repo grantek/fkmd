@@ -101,14 +101,14 @@ func (d *Fkmd) MDCart() (MDCart, error) {
 	mdc.d = d
 	if d.RamAvailable() {
 		mdc.ramAvailable = true
-		var mdram MDRam
+		var mdram MDRAM
 		mdram.size = d.GetRamSize()
 		mdram.d = d
 		mdc.ramBank = &mdram
 	} else {
 		mdc.ramAvailable = false
 	}
-	var mdrom MDRom
+	var mdrom MDROM
 	mdrom.size = d.GetRomSize()
 	mdrom.d = d
 	mdc.romBank = &mdrom
@@ -444,15 +444,15 @@ func (d *Fkmd) RamDisable() error {
 	return err
 }
 
-////////////////MDRom (MemBank)
+////////////////MDROM (MemBank)
 
-type MDRom struct {
+type MDROM struct {
 	d          *Fkmd
 	addressCur int64
 	size       int64
 }
 
-func (m *MDRom) Read(p []byte) (n int, err error) {
+func (m *MDROM) Read(p []byte) (n int, err error) {
 	/*
 	   n = 0
 	   err = m.d.RamDisable() //appropriate?
@@ -465,7 +465,7 @@ func (m *MDRom) Read(p []byte) (n int, err error) {
 	return
 }
 
-func (m *MDRom) Seek(offset int64, whence int) (newoffset int64, err error) {
+func (m *MDROM) Seek(offset int64, whence int) (newoffset int64, err error) {
 	switch whence {
 	case io.SeekCurrent:
 		offset += m.addressCur
@@ -483,7 +483,7 @@ func (m *MDRom) Seek(offset int64, whence int) (newoffset int64, err error) {
 
 //should allow incremental writing, erasing pages as they're reached?
 //if not on a page boundary, assume the rest of the page has been erased
-func (m *MDRom) Write(p []byte) (n int, err error) {
+func (m *MDROM) Write(p []byte) (n int, err error) {
 	var (
 		writelen  int
 		chunksize int
@@ -516,22 +516,26 @@ func (m *MDRom) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (m *MDRom) GetName() string {
+func (m *MDROM) Name() string {
 	return "mdrom"
 }
 
-func (m *MDRom) GetSize() int64 {
+func (m *MDROM) Size() int64 {
 	return m.size
 }
 
+func (m *MDROM) AlwaysWritable() bool {
+	return false
+}
+
 ///////////////mdram (MemBank)
-type MDRam struct {
+type MDRAM struct {
 	d          *Fkmd //attached device
 	addressCur int64 //current address pointer
 	size       int64 //size in bytes
 }
 
-func (m *MDRam) Read(p []byte) (n int, err error) {
+func (m *MDRAM) Read(p []byte) (n int, err error) {
 	/*
 	   n = 0
 	   if m.addressCur == 0 {
@@ -546,7 +550,7 @@ func (m *MDRam) Read(p []byte) (n int, err error) {
 	return
 }
 
-func (m *MDRam) Write(p []byte) (n int, err error) {
+func (m *MDRAM) Write(p []byte) (n int, err error) {
 	writelen := len(p)
 	if m.addressCur+int64(n) > m.size {
 		writelen = int(m.size - m.addressCur)
@@ -558,7 +562,7 @@ func (m *MDRam) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (m *MDRam) Seek(offset int64, whence int) (newoffset int64, err error) {
+func (m *MDRAM) Seek(offset int64, whence int) (newoffset int64, err error) {
 	switch whence {
 	case io.SeekCurrent:
 		offset += m.addressCur
@@ -574,12 +578,16 @@ func (m *MDRam) Seek(offset int64, whence int) (newoffset int64, err error) {
 	return
 }
 
-func (m *MDRam) GetName() string {
+func (m *MDRAM) Name() string {
 	return "mdram"
 }
 
-func (m *MDRam) GetSize() int64 {
+func (m *MDRAM) Size() int64 {
 	return m.size
+}
+
+func (m *MDRAM) AlwaysWritable() bool {
+	return true
 }
 
 ///////////////mdcart (MemCart)
@@ -600,7 +608,7 @@ func (mdc *MDCart) NumBanks() int {
 	return 0
 }
 
-func (mdc *MDCart) GetCurrentBank() memcart.MemBank {
+func (mdc *MDCart) CurrentBank() memcart.MemBank {
 	return mdc.currentBank
 }
 

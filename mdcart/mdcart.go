@@ -78,7 +78,7 @@ func GetRomName(mdc memcart.MemCart) (string, error) {
 		return "", err
 	}
 
-	mdr = mdc.GetCurrentBank()
+	mdr = mdc.CurrentBank()
 	mdr.Seek(0, io.SeekStart)
 	buf := make([]byte, 512)
 	n, err = mdr.Read(buf)
