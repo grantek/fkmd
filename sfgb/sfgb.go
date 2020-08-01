@@ -75,7 +75,7 @@ func main() {
 	rominfo := flag.Bool("rominfo", false, "Print ROM info")
 	//readrom := flag.Bool("readrom", false, "Read and output ROM")
 	//writerom := flag.Bool("writerom", false, "(Flash cart only) Write ROM data to flash")
-	//readram := flag.Bool("readram", false, "Read and output RAM")
+	readram := flag.Bool("readram", false, "Read and output RAM")
 	//writeram := flag.Bool("writeram", false, "Write supplied RAM data to cartridge")
 	//autoname := flag.Bool("autoname", false, "Read ROM name and generate filenames to save ROM/RAM data")
 	//romfile := flag.String("romfile", "", "File to save or read ROM data")
@@ -160,12 +160,19 @@ func main() {
 		defer d.Disconnect()
 	}
 
-	/*
-		if *readram {
-			//ReadRam(mdc, *ramfile, *autoname)
-			elog.Println("readram not implemented")
+	if *readram {
+		//ReadRam(mdc, *ramfile, *autoname)
+		ramfile := "a.sav"
+		ramsize := 8 * 1024
+		b := make([]byte, ramsize)
+		err = d.ReadRAM(b)
+		if err != nil {
+			elog.Println(err)
 		}
+		ioutil.WriteFile(ramfile, b, 0644)
+	}
 
+	/*
 		if *writeram {
 			//WriteRam(mdc, *ramfile)
 			elog.Println("writeram not implemented")

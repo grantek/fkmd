@@ -137,6 +137,7 @@ type PacketConfig struct {
 	Subcommand SubcommandByte
 	Algorithm  byte
 	MBC        byte
+	PageCount  int
 }
 
 // Packet validates the PacketConfig and returns a Packet.
@@ -172,6 +173,8 @@ func (pc *PacketConfig) Packet() (*Packet, error) {
 		return nil, fmt.Errorf("Subcommand value %d is invalid for %s.", pc.Subcommand, cb.String())
 	}
 	p.bytes[2] = byte(pc.Subcommand)
+	p.bytes[6] = byte((pc.PageCount - 1) / 256)
+	p.bytes[7] = byte((pc.PageCount - 1) % 256)
 	return p, nil
 }
 
@@ -188,11 +191,11 @@ func (p *Packet) CRC16() uint16 {
 	return c
 }
 
-// Check performs some validation on a received packet.
+// Check performs a CRC16 on a DATA packet (other control messages that
+// don't carry data don't have a check sum)
 func (p *Packet) Check() error {
-	//TODO: move this to separate validation logic
-	if ControlByte(p.bytes[0]) != DATA {
-		return errors.New("Packet is not marked as DATA type.")
+	if p.Control() != DATA {
+		return errors.New("Packet is not marked as DATA packet.")
 	}
 	c := p.CRC16()
 	if p.bytes[PACKETSIZE-2] != byte(c/256) ||
@@ -243,6 +246,22 @@ func (p *Packet) DeviceStatusLong() (*FirmwareVersion, *DeviceCartInfo) {
 	dci.RAMSize = p.bytes[30]
 	dci.CRC16 = 256*uint16(p.bytes[35]) + uint16(p.bytes[36])
 	return fw, dci
+}
+
+// Control returns the control byte from the packet as a ControlByte.
+func (p *Packet) Control() ControlByte {
+	return ControlByte(p.bytes[0])
+}
+
+// Command returns the command byte from the packet as a CommandByte.
+func (p *Packet) Command() CommandByte {
+	return CommandByte(p.bytes[1])
+}
+
+// Frame returns a slice (not a copy) of the underlying []byte that
+// refers to the packet's data frame.
+func (p *Packet) Frame() []byte {
+	return p.bytes[6:]
 }
 
 //go:generate stringer -type=ControlByte
@@ -392,6 +411,12 @@ func (d *GBCF) SendPacket(p *Packet) error {
 	return nil
 }
 
+//SendControl sends a control byte.
+func (d *GBCF) SendControl(cb ControlByte) error {
+	_, err := d.fd.Write([]byte{byte(cb)})
+	return err
+}
+
 func (d *GBCF) ReadDeviceStatus() (*FirmwareVersion, error) {
 	pc := &PacketConfig{
 		Control:    DATA,
@@ -492,9 +517,11 @@ func (d *GBCF) ReceivePacket() (*Packet, error) {
 	if n < 1 {
 		return nil, errors.New("Failed to read first byte of packet.")
 	}
+	// Non-DATA packets only send one byte over serial.
 	if ControlByte(p.bytes[0]) != DATA {
 		return p, nil
 	}
+	// Read rest of DATA packet.
 	n, err = d.fd.Read(p.bytes[1:])
 	if err != nil {
 		return nil, err
@@ -505,8 +532,90 @@ func (d *GBCF) ReceivePacket() (*Packet, error) {
 	return p, nil
 }
 
-func (d *GBCF) readRAM([]byte, error) {
-
+// readRAM reads all of RAM up to len(b), and returns an error if b is not
+// completely filled.
+func (d *GBCF) ReadRAM(b []byte) error {
+	want := len(b)
+	pgc := 1
+	switch {
+	case want == 2*1024:
+	case want > 0 && want%(8*1024) == 0:
+		pgc = want / (8 * 1024)
+	default:
+		return fmt.Errorf("readRAM: invalid buffer size %d bytes, should be 2KiB or N*8KiB", want)
+	}
+	pc := &PacketConfig{
+		Control:    DATA,
+		Command:    CONFIG,
+		Subcommand: RRAM,
+		Algorithm:  ALG16,
+		MBC:        MBCAUTO,
+		PageCount:  pgc,
+	}
+	p, err := pc.Packet()
+	if err != nil {
+		return err
+	}
+	if err := d.SendPacket(p); err != nil {
+		return err
+	}
+	fin := false
+	n := 0
+	for fin == false {
+		page := (n / FRAMESIZE) / 128 // 8kiB RAM page / 64B packet payload
+		packet := (n / FRAMESIZE) % 128
+		p, err = d.ReceivePacket()
+		if err != nil {
+			// TODO: original code has 10 retries on serial TIMEOUT.
+			return err
+		}
+		switch pt := p.Control(); pt {
+		case DATA:
+		case END:
+			if n == want {
+				fmt.Printf("DEBUG: got END with full buffer at %d\n", n)
+				return nil
+			}
+			fallthrough
+		default:
+			return fmt.Errorf("readRAM: unexpected control byte  %q: got %d bytes, want %d", pt, n, want)
+		}
+		if err := p.Check(); err != nil {
+			return err
+		}
+		cm := p.Command()
+		if cm != NORMAL_DATA && cm != LAST_DATA {
+			return fmt.Errorf("readRAM: unexpected command byte %q: got %d bytes, want %d", cm, n, want)
+		}
+		pk := int(p.bytes[3])
+		pg := int(p.bytes[4])*256 + int(p.bytes[5])
+		if packet != pk || page != pg {
+			return fmt.Errorf("readRAM: packet out of sequence: got %d,%d bytes, want %d,%d", pk, pg, packet, page)
+		}
+		if n+FRAMESIZE == want {
+			if want == 2*1024 {
+				d.SendControl(END)
+				fin = true
+			}
+			if cm == LAST_DATA {
+				fmt.Printf("DEBUG: got LAST_DATA at %d\n", n)
+				fin = true
+			} else {
+				fmt.Printf("DEBUG: filled buffer with NORMAL_DATA command at %d\n", n)
+				d.SendControl(ACK)
+			}
+		} else {
+			if packet == 127 {
+				d.SendControl(ACK)
+			} else {
+				d.SendControl(ACK)
+			}
+		}
+		copy(b[n:n+FRAMESIZE], p.Frame())
+		n = n + FRAMESIZE
+		fmt.Printf("DEBUG: buffer: %d page: %d packet: %d pk: %d pg: %d\n", n, page, packet, pk, pg)
+	}
+	return nil
 }
 
 type GBCartRAM struct {
@@ -525,6 +634,11 @@ func (m *GBCartRAM) Size() int64 {
 
 func (m *GBCartRAM) AlwaysWritable() bool {
 	return true
+}
+
+func (m *GBCartRAM) Read(p []byte) (n int, err error) {
+	// wrap readRAM bytes with a reader
+	return 0, nil
 }
 
 /* from fkmd:
