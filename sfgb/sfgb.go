@@ -11,7 +11,7 @@ import (
 	"log"
 	"os"
 	//"regexp"
-	//"strings"
+	"strings"
 
 	"github.com/grantek/fkmd/gbcf"
 	"github.com/jacobsa/go-serial/serial"
@@ -71,15 +71,17 @@ func main() {
 	minread := new(uint)
 	*minread = 0
 
-	//fkmd options
+	//sfgb options
 	rominfo := flag.Bool("rominfo", false, "Print ROM info")
-	//readrom := flag.Bool("readrom", false, "Read and output ROM")
-	//writerom := flag.Bool("writerom", false, "(Flash cart only) Write ROM data to flash")
-	readram := flag.Bool("readram", false, "Read and output RAM")
-	//writeram := flag.Bool("writeram", false, "Write supplied RAM data to cartridge")
-	//autoname := flag.Bool("autoname", false, "Read ROM name and generate filenames to save ROM/RAM data")
-	//romfile := flag.String("romfile", "", "File to save or read ROM data")
-	//ramfile := flag.String("ramfile", "", "File to save or read RAM data")
+	readrom := flag.Bool("readrom", false, "Read and save ROM")
+	writerom := flag.Bool("writerom", false, "(Flash cart only) Write ROM data to flash")
+	readram := flag.Bool("readram", false, "Read and save RAM")
+	writeram := flag.Bool("writeram", false, "Write supplied RAM data to cartridge")
+	autoname := flag.Bool("autoname", false, "Read ROM name and generate filenames to save ROM/RAM data")
+	//mbc := flag.String("mbc", "auto", "")
+	romfile := flag.String("romfile", "", "File to save or read ROM data (- for STDOUT/STDIN)")
+	ramfile := flag.String("ramfile", "", "File to save or read RAM data (- for STDOUT/STDIN)")
+	ramsize := flag.Int("ramsize", 0, "Size of RAM (0 to autodetect)")
 	verbose := flag.Bool("verbose", false, "Output info logs to stderr")
 	debug := flag.Bool("debug", false, "Output debug logs to stderr (implies verbose)")
 
@@ -102,37 +104,35 @@ func main() {
 		usage()
 	}
 
-	/*
-		if *readram && *writeram {
-			elog.Println("Can't read and write cartridge RAM in one invocation")
-			usage()
-		}
+	if *readram && *writeram {
+		elog.Println("Can't read and write cartridge RAM in one invocation")
+		usage()
+	}
 
-		if *readrom && *writerom {
-			elog.Println("Can't read and write cartridge ROM in one invocation")
-			usage()
-		}
+	if *readrom && *writerom {
+		elog.Println("Can't read and write cartridge ROM in one invocation")
+		usage()
+	}
 
-		if (*romfile != "" || *ramfile != "") && *autoname {
-			elog.Println("Can't supply file names when autoname is used")
-			usage()
-		}
+	if (*romfile != "" || *ramfile != "") && *autoname {
+		elog.Println("Can't supply file names when autoname is used")
+		usage()
+	}
 
-		if (*readrom || *writerom) && (*romfile == "" && !*autoname) {
-			elog.Println("No ROM file name supplied")
-			usage()
-		}
+	if (*readrom || *writerom) && (*romfile == "" && !*autoname) {
+		elog.Println("No ROM file name supplied")
+		usage()
+	}
 
-		if (*readram || *writeram) && (*ramfile == "" && !*autoname) {
-			elog.Println("No RAM file name supplied")
-			usage()
-		}
+	if (*readram || *writeram) && (*ramfile == "" && !*autoname) {
+		elog.Println("No RAM file name supplied")
+		usage()
+	}
 
-		if !*readrom && !*writerom && !*readram && !*writeram && !*rominfo {
-			elog.Println("No action specified")
-			usage()
-		}
-	*/
+	if !*readrom && !*writerom && !*readram && !*writeram && !*rominfo {
+		elog.Println("No action specified")
+		usage()
+	}
 
 	options := serial.OpenOptions{
 		PortName:               *port,
@@ -160,55 +160,87 @@ func main() {
 		defer d.Disconnect()
 	}
 
+	var dci *gbcf.DeviceCartInfo
+	var gbci *gbcf.GBCartInfo
+	if *rominfo || *autoname || (*ramsize == 0) {
+		fv, err := d.ReadDeviceStatus()
+		if err != nil {
+			elog.Printf("ReadDeviceStatus: %v", err)
+			os.Exit(-1)
+		}
+		if *rominfo {
+			b, err := json.MarshalIndent(fv, "", "  ")
+			if err != nil {
+				dlog.Println("MarshallIndent: ", err)
+			}
+			dlog.Printf("Device status:\n%s\n", string(b))
+			fmt.Printf("Device Firmware version: %d%d.%d%d\n", fv.Ver11, fv.Ver12, fv.Ver21, fv.Ver22)
+		}
+
+		_, dci, err = d.ReadStatus()
+		if err != nil {
+			elog.Println(err)
+			os.Exit(-1)
+		}
+		if *rominfo {
+			b, err := json.MarshalIndent(dci, "", "  ")
+			if err != nil {
+				dlog.Println("MarshallIndent: ", err)
+			}
+			dlog.Printf("Raw cart status:\n%s\n", string(b))
+
+			gbci = dci.GBCartInfo()
+			b, err = json.MarshalIndent(gbci, "", "  ")
+			if err != nil {
+				fmt.Println("MarshallIndent: ", err)
+			}
+			fmt.Printf("Cart status:\n%s\n", string(b))
+		}
+	}
+	if *autoname {
+		r := strings.NewReplacer("/", "_", " ", "_")
+		cartname := r.Replace(strings.TrimSpace(string(gbci.GameNamePrintable)))
+		if cartname == "" {
+			cartname = "game"
+		}
+		suffix := "gb"
+		if dci.CGB {
+			suffix = "gbc"
+		}
+		*romfile = cartname + "." + suffix
+		*ramfile = cartname + ".sav"
+	}
+
+	if *ramsize == 0 {
+		*ramsize = gbcf.RamSizeBytes[dci.RAMSize]
+	}
+
 	if *readram {
 		//ReadRam(mdc, *ramfile, *autoname)
-		ramfile := "a.sav"
-		ramsize := 8 * 1024
-		b := make([]byte, ramsize)
+		if *ramsize == 0 {
+			elog.Println("Cartridge RAM not detected (force attempt to read by setting explicit -ramsize).")
+		}
+		dlog.Printf("Using ramfile: %s\n", *ramfile)
+		b := make([]byte, *ramsize)
 		err = d.ReadRAM(b)
 		if err != nil {
 			elog.Println(err)
 		}
-		ioutil.WriteFile(ramfile, b, 0644)
+		ioutil.WriteFile(*ramfile, b, 0644)
 	}
 
-	/*
-		if *writeram {
-			//WriteRam(mdc, *ramfile)
-			elog.Println("writeram not implemented")
-		}
+	if *writeram {
+		//WriteRam(mdc, *ramfile)
+		elog.Println("writeram not implemented")
+	}
 
-		if *readrom {
-			//ReadRom(mdc, *romfile, *autoname)
-			elog.Println("readrom not implemented")
-		}
+	if *readrom {
+		//ReadRom(mdc, *romfile, *autoname)
+		elog.Println("readrom not implemented")
+	}
 
-		if *writerom {
-			//WriteRom(mdc, *romfile)
-			elog.Println("writerom not implemented")
-		}
-	*/
-
-	if *rominfo {
-		ds, err := d.ReadDeviceStatus()
-		if err != nil {
-			elog.Printf("ReadDeviceStatus: %v", err)
-		}
-		fmt.Println("Device status:")
-		b, err := json.MarshalIndent(ds, "", "  ")
-		if err != nil {
-			fmt.Println("MarshallIndent: ", err)
-		}
-		fmt.Println(string(b))
-		ci, err := d.GBCartInfo()
-		if err != nil {
-			elog.Println(err)
-		}
-		fmt.Println("Cart status:")
-		b, err = json.MarshalIndent(ci, "", "  ")
-		if err != nil {
-			fmt.Println("MarshallIndent: ", err)
-		}
-		fmt.Println(string(b))
+	if *writerom {
+		//WriteRom(mdc, *romfile)
+		elog.Println("writerom not implemented")
 	}
 }

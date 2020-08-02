@@ -3,9 +3,11 @@
 package gbcf
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 	//"github.com/grantek/fkmd/gbcart"
@@ -43,31 +45,31 @@ type DeviceCartInfo struct {
 	/* flash chip data */
 	ManufacturerID byte
 	ChipID         byte
-	BBL            byte // Boot Block Locked
+	BBL            bool // Boot Block Locked
 	/* info about loaded game */
-	LogoCorrect byte
-	CGB         byte
-	SGB         byte
-	ROMSize     byte //[6]byte
-	RAMSize     byte //[6]byte
-	CRC16       uint16
-	TypeID      byte   //typ          [30]byte
-	GameName    string //[17]byte
+	LogoCorrect   bool
+	CGB           bool
+	SGB           bool
+	ROMSize       byte //[6]byte
+	RAMSize       byte //[6]byte
+	CRC16         uint16
+	TypeID        byte   //typ          [30]byte
+	GameNameBytes []byte //[17]byte
 }
 
 // GBCartInfo is human-readable version of DeviceCartInfo
 type GBCartInfo struct {
-	Manufacturer string
-	ChipID       byte
-	BBL          bool
-	LogoCorrect  bool
-	CGB          bool
-	SGB          bool
-	ROMSize      string
-	RAMSize      string
-	CRC16        uint16
-	CartType     string
-	GameName     string
+	Manufacturer      string
+	ChipID            byte
+	BBL               bool
+	LogoCorrect       bool
+	CGB               bool
+	SGB               bool
+	ROMSize           string
+	RAMSize           string
+	CRC16             uint16
+	CartType          string
+	GameNamePrintable string
 }
 
 /* array of cart types - source GB CPU Manual */
@@ -99,7 +101,7 @@ var carts = map[byte]string{
 	0xfe: "Hudson HuC-3",
 }
 
-var romSizes = map[byte]string{
+var RomSizes = map[byte]string{
 	0x00: "32KB",
 	0x01: "64KB",
 	0x02: "128KB",
@@ -107,17 +109,40 @@ var romSizes = map[byte]string{
 	0x04: "512KB",
 	0x05: "1MB",
 	0x06: "2MB",
+	0x07: "4MB", // Not in original code, not sure if device will detect this.
 	0x52: "1.1MB",
 	0x53: "1.2MB",
 	0x54: "1.5MB",
 }
 
-var ramSizes = map[byte]string{
+var RamSizes = map[byte]string{
 	0x00: "0KB",
 	0x01: "2KB",
 	0x02: "8KB",
 	0x03: "32KB",
 	0x04: "128KB",
+}
+
+var RomSizeBytes = map[byte]int{
+	0x00: 32768,
+	0x01: 65536,
+	0x02: 131072,
+	0x03: 262144,
+	0x04: 524288,
+	0x05: 524288,
+	0x06: 2097152,
+	0x07: 4194304,
+	0x52: 1179648,
+	0x53: 1310720,
+	0x54: 1572864,
+}
+
+var RamSizeBytes = map[byte]int{
+	0x00: 0,
+	0x01: 2048,
+	0x02: 8192,
+	0x03: 32768,
+	0x04: 131072,
 }
 
 type Packet struct {
@@ -232,15 +257,17 @@ func (p *Packet) DeviceStatusLong() (*FirmwareVersion, *DeviceCartInfo) {
 	dci := &DeviceCartInfo{}
 	dci.ManufacturerID = p.bytes[4]
 	dci.ChipID = p.bytes[5]
-	dci.BBL = p.bytes[6] & 0x01
-	dci.LogoCorrect = p.bytes[8]
-	dci.GameName = string(p.bytes[9:25])
-	if p.bytes[24] == 0x80 {
-		dci.CGB = 1
+	dci.BBL = p.bytes[6]&0x01 == 0x01
+	dci.LogoCorrect = p.bytes[8] == 1
+	gnb := p.bytes[9:25]
+	i := bytes.IndexByte(gnb, 0x00)
+	if i >= 0 {
+		gnb = gnb[:i]
 	}
-	if p.bytes[27] == 0x03 {
-		dci.SGB = 1
-	}
+	dci.GameNameBytes = make([]byte, len(gnb))
+	copy(dci.GameNameBytes, gnb)
+	dci.CGB = p.bytes[24] == 0x80
+	dci.SGB = p.bytes[27] == 0x03
 	dci.TypeID = p.bytes[28]
 	dci.ROMSize = p.bytes[29]
 	dci.RAMSize = p.bytes[30]
@@ -479,16 +506,23 @@ func (d *GBCF) GBCartInfo() (*GBCartInfo, error) {
 func (dci *DeviceCartInfo) GBCartInfo() *GBCartInfo {
 	g := &GBCartInfo{}
 	g.Manufacturer = manufacturers[dci.ManufacturerID]
-	g.LogoCorrect = dci.LogoCorrect != 0
+	g.LogoCorrect = dci.LogoCorrect
 	g.ChipID = dci.ChipID
 	g.CartType = carts[dci.TypeID]
-	g.BBL = dci.BBL != 0
-	g.CGB = dci.CGB != 0
-	g.SGB = dci.SGB != 0
+	g.BBL = dci.BBL
+	g.CGB = dci.CGB
+	g.SGB = dci.SGB
 	g.CRC16 = dci.CRC16
-	g.GameName = dci.GameName[:strings.Index(dci.GameName, "\x00")]
-	g.ROMSize = romSizes[dci.ROMSize]
-	g.RAMSize = ramSizes[dci.RAMSize]
+	runes := make([]rune, 0, len(dci.GameNameBytes))
+	for _, b := range dci.GameNameBytes {
+		if !strconv.IsPrint(rune(b)) {
+			break
+		}
+		runes = append(runes, rune(b))
+	}
+	g.GameNamePrintable = string(runes)
+	g.ROMSize = RomSizes[dci.ROMSize]
+	g.RAMSize = RamSizes[dci.RAMSize]
 	return g
 }
 
