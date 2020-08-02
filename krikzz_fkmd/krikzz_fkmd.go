@@ -253,13 +253,13 @@ func (d *Fkmd) ReadWord(addr int64) (uint16, error) {
 
 	_, err = d.fd.Write(cmd)
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
 		return 0, err
 	}
 
 	_, err = d.fd.Read(buf)
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
 		return 0, err
 	}
 
@@ -495,14 +495,14 @@ func (m *MDRom) Write(p []byte) (n int, err error) {
 			chunksize = int(WRITE_BLOCK_SIZE)
 		}
 		if m.addressCur%int64(WRITE_BLOCK_SIZE) == 0 {
-			fmt.Printf("Debug: erasing at %d\n", m.addressCur)
+			//fmt.Printf("Debug: erasing at %d\n", m.addressCur)
 			m.d.FlashResetBypass()
 			m.d.FlashErase(m.addressCur)
 			m.d.FlashUnlockBypass()
 			m.d.Seek(m.addressCur, io.SeekStart)
 		}
 		//chunksize = chunksize - int(m.addressCur%WRITE_BLOCK_SIZE)
-		fmt.Printf("Debug:FlashWrite p[%d : %d]\n", n, n+chunksize)
+		//fmt.Printf("Debug:FlashWrite p[%d : %d]\n", n, n+chunksize)
 		err = m.d.FlashWrite(p[n : n+chunksize])
 
 		if err == nil {

@@ -72,7 +72,8 @@ func ReadRom(mdc memcart.MemCart, romfile string, autoname bool) {
 	romsize = mdr.GetSize()
 	mdr.Seek(0, io.SeekStart)
 	buf := make([]byte, blocksize)
-	for n := int64(0); n < romsize; n += blocksize {
+	for n = 0; n < romsize; n += blocksize {
+		dlog.Printf("Bytes read: %d", n)
 		m, err = mdr.Read(buf)
 		if err != nil {
 			panic(err)
@@ -82,7 +83,6 @@ func ReadRom(mdc memcart.MemCart, romfile string, autoname bool) {
 			break
 		}
 		f.Write(buf[0:m])
-		dlog.Printf("Bytes read: %d", m)
 	}
 	ilog.Printf("Finished reading, bytes read: %d", n)
 }
