@@ -33,14 +33,15 @@ Use of the krikzz.com source code for the Windows C# utility is with permission.
 
 "V2" utility does the same thing, but written in a different style.
 
-## sfgb
+### sfgb
 
 WIP, currently supported flags: ``-rominfo`` ``-readram``
 
-Game Boy cart flasher documented by jrodrigo.net/cart-flasher and www.reinerziegler.de/readplus.htm
-Original PC driver software from sourceforge.net/projects/gbcf
+Game Boy cart flasher documented by [jrodrigo.net/cart-flasher](https://www.jrodrigo.net/es/project/gameboy-cart-flasher/) and [www.reinerziegler.de/readplus.htm](https://web.archive.org/web/20120403050446/http://www.reinerziegler.de/readplus.htm#GB_Flasher)
+Original PC driver software from [sourceforge.net/projects/gbcf](https://sourceforge.net/projects/gbcf)
 
 ## Usage
+
 ```
 Usage of sfmd:
   -autoname
