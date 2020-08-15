@@ -15,23 +15,7 @@ import (
 	"github.com/jacobsa/go-serial/serial"
 )
 
-/* leftover from const.h
-#define USB 0
-#define SERIAL 1
-
-// strings for version information
-#ifdef Q_WS_X11
-#define SYSTEM "LINUX"
-#define DEVELOPED "GCC 4.1.1 + QT 4.3.2"
-#endif
-
-#ifdef Q_WS_WIN
-#define SYSTEM "WINDOWS"
-#define DEVELOPED "Dev-C++ 4.9.9.2 + QT 4.3.2"
-#endif
-
-*/
-/* array of cart types - source GB CPU Manual */
+// array of cart types - source GB CPU Manual
 var carts = map[byte]string{
 	0x00: "ROM ONLY",
 	0x01: "ROM+MBC1",
@@ -120,10 +104,8 @@ const (
 	DELETE_TIMEOUT = 60 * time.Second
 	PACKETSIZE     = 72
 	FRAMESIZE      = 64
-	//AUTOSIZE       = -1 // unused
-	//PORTS_COUNT    = 4 // not used in protocol
-	//VER            = "1.1" // not used in protocol
 )
+
 const (
 	//enum error_t (signed char)
 	TIMEOUT     = -1
@@ -176,12 +158,6 @@ const (
 	ALG16 = 0x00
 	ALG12 = 0x01
 
-	// enum dap_t, unreferenced in original code.
-	// LONGER   = 0x00
-	// DEFAULT  = 0x01
-	// DATAPOLL = 0x02
-	// TOGGLE   = 0x03 // Default
-
 	// speed_type, appears to be local to original code.
 	// LOW      = 0x00 // 125000 baud
 	// STANDARD = 0x01 // 185000 baud, default
@@ -199,14 +175,14 @@ const (
 
 // DeviceCartInfo stores the cart-related parts of STATUS(READ_ID)
 type DeviceCartInfo struct {
-	/* flash chip data */
+	// Flash chip data.
 	ManufacturerID byte
 	ChipID         byte
 	BBL            bool // Boot Block Locked
-	/* info about loaded game */
+	// Info about loaded game.
 	LogoCorrect   bool
-	CGB           bool
-	SGB           bool
+	CGB           bool // Color Game Boy
+	SGB           bool // Super Game Boy
 	ROMSize       byte //[6]byte
 	RAMSize       byte //[6]byte
 	CRC16         uint16
@@ -239,7 +215,7 @@ func (dci *DeviceCartInfo) GBCartInfo() *GBCartInfo {
 
 // FirmwareVersion represents the device version sent by STATUS(NREAD_ID)
 type FirmwareVersion struct {
-	/* digits describing version of device soft */
+	// BCD, formatted by original code as ("%d%d.%d%d", v11,v12,v21,v22)
 	Ver11 byte
 	Ver12 byte
 	Ver21 byte
@@ -425,6 +401,21 @@ func (d *GBCF) ReadStatus() (*FirmwareVersion, *DeviceCartInfo, error) {
 	return fw, dci, nil
 }
 
+/*
+// Receive a character when a control character is expected
+func (d *GBCF) ReceiveControl() (byte, error) {
+	b := make([]byte, 1)
+	n, err := d.fd.Read(b)
+	if err != nil {
+		return 0, err
+	}
+	if n < len(b) {
+		return 0, fmt.Errorf("short read: read %d of %d", n, len(b))
+	}
+	return b[0], nil
+}
+*/
+
 // ReceivePacket receives a Packet
 func (d *GBCF) ReceivePacket() (*Packet, error) {
 	p := &Packet{}
@@ -515,13 +506,6 @@ func (m *GBCartRAM) Size() int64 {
 }
 
 type Packet struct {
-	//control byte,
-	//command byte,
-	//subcommand byte,
-	//algo byte,
-	//mbc byte,
-	//frame byte[FRAMESIZE],
-	//crc16 uint16,
 	bytes [PACKETSIZE]byte
 }
 
@@ -659,51 +643,3 @@ func (pc *PacketConfig) Packet() (*Packet, error) {
 	p.bytes[7] = byte((pc.PageCount - 1) % 256)
 	return p, nil
 }
-
-/*
-// Receive a character when a control character is expected
-func (d *GBCF) receive_char() (byte, error) {
-	b := make([]byte, 1)
-	n, err := d.fd.Read(b)
-	if err != nil {
-		return 0, err
-	}
-	if n < len(b) {
-		return 0, fmt.Errorf("short read: read %d of %d", n, len(b))
-	}
-	return b[0], nil
-}
-*/
-
-/* from fkmd:
-//Perform some initialisation and verify device ID, as per vendor driver
-//Requires Connect()
-func (d *GBCF) Handshake() error {
-	//my flashkit device ID is 257, which matches this logic
-	id, err := d.GetID()
-	if err != nil {
-		return err
-	}
-
-	if (id&0xff) == (id>>8) && id != 0 {1G
-		//vendor driver doesn't close and reopen
-		d.fd.Close()
-		//port.WriteTimeout = 2000;
-		//port.ReadTimeout = 2000;
-		d.opt.InterCharacterTimeout = 2000
-		f, err := serial.Open(d.opt)
-		if err != nil {
-			return err
-		}
-		d.fd = f
-		//need to redo GetID after reopen
-		_, err = d.GetID()
-		if err != nil {
-			return err
-		}
-		err = d.SetDelay(0)
-		return err
-	}
-	return errors.New(fmt.Sprintf("Unknown device ID %d", id))
-}
-*/
