@@ -31,47 +31,6 @@ import (
 #endif
 
 */
-// FirmwareVersion represents the device version sent by STATUS(NREAD_ID)
-type FirmwareVersion struct {
-	/* digits describing version of device soft */
-	Ver11 byte
-	Ver12 byte
-	Ver21 byte
-	Ver22 byte
-}
-
-// DeviceCartInfo stores the cart-related parts of STATUS(READ_ID)
-type DeviceCartInfo struct {
-	/* flash chip data */
-	ManufacturerID byte
-	ChipID         byte
-	BBL            bool // Boot Block Locked
-	/* info about loaded game */
-	LogoCorrect   bool
-	CGB           bool
-	SGB           bool
-	ROMSize       byte //[6]byte
-	RAMSize       byte //[6]byte
-	CRC16         uint16
-	TypeID        byte   //typ          [30]byte
-	GameNameBytes []byte //[17]byte
-}
-
-// GBCartInfo is human-readable version of DeviceCartInfo
-type GBCartInfo struct {
-	Manufacturer      string
-	ChipID            byte
-	BBL               bool
-	LogoCorrect       bool
-	CGB               bool
-	SGB               bool
-	ROMSize           string
-	RAMSize           string
-	CRC16             uint16
-	CartType          string
-	GameNamePrintable string
-}
-
 /* array of cart types - source GB CPU Manual */
 var carts = map[byte]string{
 	0x00: "ROM ONLY",
@@ -143,152 +102,6 @@ var RamSizeBytes = map[byte]int{
 	0x02: 8192,
 	0x03: 32768,
 	0x04: 131072,
-}
-
-type Packet struct {
-	//control byte,
-	//command byte,
-	//subcommand byte,
-	//algo byte,
-	//mbc byte,
-	//frame byte[FRAMESIZE],
-	//crc16 uint16,
-	bytes [PACKETSIZE]byte
-}
-
-type PacketConfig struct {
-	Control    ControlByte
-	Command    CommandByte
-	Subcommand SubcommandByte
-	Algorithm  byte
-	MBC        byte
-	PageCount  int
-}
-
-// Packet validates the PacketConfig and returns a Packet.
-func (pc *PacketConfig) Packet() (*Packet, error) {
-	p := &Packet{}
-	// generated functions return "%T(%d)" for unknown values
-	if strings.HasPrefix(pc.Control.String(), "ControlByte") {
-		return nil, fmt.Errorf("Invalid control character for packet: %X", pc.Control)
-	}
-	p.bytes[0] = byte(pc.Control)
-	if strings.HasPrefix(pc.Command.String(), "CommandByte") {
-		return nil, fmt.Errorf("Invalid command character for packet: %X", pc.Command)
-	}
-	p.bytes[1] = byte(pc.Command)
-	// Subcommand values have a rango of 0 to N-1 for commands with N subcommands.
-	var n int
-	cb := CommandByte(p.bytes[1])
-	switch cb {
-	case CONFIG:
-		n = 4
-	case NORMAL_DATA:
-		n = 1
-	case LAST_DATA:
-		n = 1
-	case ERASE:
-		n = 2
-	case STATUS:
-		n = 2
-	default:
-		n = 1 // allow zeroing of packet
-	}
-	if int(pc.Subcommand) >= n {
-		return nil, fmt.Errorf("Subcommand value %d is invalid for %s.", pc.Subcommand, cb.String())
-	}
-	p.bytes[2] = byte(pc.Subcommand)
-	p.bytes[6] = byte((pc.PageCount - 1) / 256)
-	p.bytes[7] = byte((pc.PageCount - 1) % 256)
-	return p, nil
-}
-
-// CRC16 returns the CRC16 of a packet.
-// Original source defines its own crc16 function.
-// - the predefined table matches CRC16-CCITT-FALSE
-// - the initial CRC is 0x0000, as in CRC16-CCITT
-// - the function hashes the bytes of the packet and returns a short
-func (p *Packet) CRC16() uint16 {
-	var c uint16
-	for _, v := range p.bytes[:PACKETSIZE-2] {
-		c = (c << 8) ^ crc16Table[byte(c>>8)^v]
-	}
-	return c
-}
-
-// Check performs a CRC16 on a DATA packet (other control messages that
-// don't carry data don't have a check sum)
-func (p *Packet) Check() error {
-	if p.Control() != DATA {
-		return errors.New("Packet is not marked as DATA packet.")
-	}
-	c := p.CRC16()
-	if p.bytes[PACKETSIZE-2] != byte(c/256) ||
-		p.bytes[PACKETSIZE-1] != byte(c%256) {
-		return errors.New("CRC error in received packet.")
-	}
-	return nil
-}
-
-// Byte returns a copy of the Packet bytes, with CRC filled in.
-func (p *Packet) Bytes() ([]byte, error) {
-	c := p.CRC16()
-	p.bytes[PACKETSIZE-2] = byte(c / 256)
-	p.bytes[PACKETSIZE-1] = byte(c % 256)
-	b := make([]byte, PACKETSIZE)
-	if n := copy(b, p.bytes[:]); n != PACKETSIZE {
-		return nil, fmt.Errorf("Serialise: copied %d of %d bytes", n, PACKETSIZE)
-	}
-	return b, nil
-}
-
-// DeviceStatusShort parses a STATUS(NREAD_ID) packet into a *FirmwareVersion.
-func (p *Packet) DeviceStatusShort() *FirmwareVersion {
-	fw := &FirmwareVersion{}
-	fw.Ver11 = p.bytes[2] / 16
-	fw.Ver12 = p.bytes[2] % 16
-	fw.Ver21 = p.bytes[3] / 16
-	fw.Ver22 = p.bytes[3] % 16
-	return fw
-}
-
-func (p *Packet) DeviceStatusLong() (*FirmwareVersion, *DeviceCartInfo) {
-	fw := p.DeviceStatusShort()
-	dci := &DeviceCartInfo{}
-	dci.ManufacturerID = p.bytes[4]
-	dci.ChipID = p.bytes[5]
-	dci.BBL = p.bytes[6]&0x01 == 0x01
-	dci.LogoCorrect = p.bytes[8] == 1
-	gnb := p.bytes[9:25]
-	i := bytes.IndexByte(gnb, 0x00)
-	if i >= 0 {
-		gnb = gnb[:i]
-	}
-	dci.GameNameBytes = make([]byte, len(gnb))
-	copy(dci.GameNameBytes, gnb)
-	dci.CGB = p.bytes[24] == 0x80
-	dci.SGB = p.bytes[27] == 0x03
-	dci.TypeID = p.bytes[28]
-	dci.ROMSize = p.bytes[29]
-	dci.RAMSize = p.bytes[30]
-	dci.CRC16 = 256*uint16(p.bytes[35]) + uint16(p.bytes[36])
-	return fw, dci
-}
-
-// Control returns the control byte from the packet as a ControlByte.
-func (p *Packet) Control() ControlByte {
-	return ControlByte(p.bytes[0])
-}
-
-// Command returns the command byte from the packet as a CommandByte.
-func (p *Packet) Command() CommandByte {
-	return CommandByte(p.bytes[1])
-}
-
-// Frame returns a slice (not a copy) of the underlying []byte that
-// refers to the packet's data frame.
-func (p *Packet) Frame() []byte {
-	return p.bytes[6:]
 }
 
 //go:generate stringer -type=ControlByte
@@ -384,123 +197,21 @@ const (
 	RUMBLE  = 0x06
 )
 
-type GBCF struct {
-	fd  io.ReadWriteCloser
-	opt serial.OpenOptions
-}
-
-func (d *GBCF) SetOptions(options serial.OpenOptions) {
-	d.opt = options
-}
-
-//Perform initialisation and return a MemCart
-func (d *GBCF) MemCart() (memcart.MemCart, error) {
-	//var gbc gbcart
-	if err := d.Connect(); err != nil {
-		return nil, err
-	}
-	/*if err := d.Handshake(); err != nil {
-	return nil, err
-
-	*/
-
-	return nil, nil //d.Gbcart()
-}
-
-//Just open the serial device for low-level debugging
-func (d *GBCF) Connect() error {
-	f, err := serial.Open(d.opt)
-	d.fd = f
-	return err
-}
-
-func (d *GBCF) Disconnect() error {
-	e := d.fd.Close()
-	if e != nil {
-		d.fd = nil
-	}
-	return e
-}
-
-// SendPacket sends a packet.
-func (d *GBCF) SendPacket(p *Packet) error {
-	b, err := p.Bytes()
-	if err != nil {
-		return err
-	}
-	n, err := d.fd.Write(p.bytes[:])
-	if err != nil {
-		return err
-	}
-	if n != len(b) {
-		return fmt.Errorf("short write: sent %d of %d", n, len(b))
-	}
-	return nil
-}
-
-//SendControl sends a control byte.
-func (d *GBCF) SendControl(cb ControlByte) error {
-	_, err := d.fd.Write([]byte{byte(cb)})
-	return err
-}
-
-func (d *GBCF) ReadDeviceStatus() (*FirmwareVersion, error) {
-	pc := &PacketConfig{
-		Control:    DATA,
-		Command:    STATUS,
-		Subcommand: NREAD_ID,
-		Algorithm:  ALG16,
-		MBC:        MBCAUTO,
-	}
-	p, err := pc.Packet()
-	if err != nil {
-		return nil, err
-	}
-	if err := d.SendPacket(p); err != nil {
-		return nil, err
-	}
-	p, err = d.ReceivePacket()
-	if err != nil {
-		return nil, err
-	}
-	if err := p.Check(); err != nil {
-		return nil, err
-	}
-	return p.DeviceStatusShort(), nil
-}
-
-func (d *GBCF) ReadStatus() (*FirmwareVersion, *DeviceCartInfo, error) {
-	pc := &PacketConfig{
-		Control:    DATA,
-		Command:    STATUS,
-		Subcommand: READ_ID,
-		Algorithm:  ALG16,
-		MBC:        MBCAUTO,
-	}
-	p, err := pc.Packet()
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := d.SendPacket(p); err != nil {
-		return nil, nil, err
-	}
-	p, err = d.ReceivePacket()
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := p.Check(); err != nil {
-		return nil, nil, err
-	}
-	fw, dci := p.DeviceStatusLong()
-	return fw, dci, nil
-}
-
-func (d *GBCF) GBCartInfo() (*GBCartInfo, error) {
-	_, dci, err := d.ReadStatus()
-	if err != nil {
-		return nil, err
-	}
-	return dci.GBCartInfo(), nil
+// DeviceCartInfo stores the cart-related parts of STATUS(READ_ID)
+type DeviceCartInfo struct {
+	/* flash chip data */
+	ManufacturerID byte
+	ChipID         byte
+	BBL            bool // Boot Block Locked
+	/* info about loaded game */
+	LogoCorrect   bool
+	CGB           bool
+	SGB           bool
+	ROMSize       byte //[6]byte
+	RAMSize       byte //[6]byte
+	CRC16         uint16
+	TypeID        byte   //typ          [30]byte
+	GameNameBytes []byte //[17]byte
 }
 
 func (dci *DeviceCartInfo) GBCartInfo() *GBCartInfo {
@@ -526,44 +237,80 @@ func (dci *DeviceCartInfo) GBCartInfo() *GBCartInfo {
 	return g
 }
 
-/*
-// Receive a character when a control character is expected
-func (d *GBCF) receive_char() (byte, error) {
-	b := make([]byte, 1)
-	n, err := d.fd.Read(b)
-	if err != nil {
-		return 0, err
-	}
-	if n < len(b) {
-		return 0, fmt.Errorf("short read: read %d of %d", n, len(b))
-	}
-	return b[0], nil
+// FirmwareVersion represents the device version sent by STATUS(NREAD_ID)
+type FirmwareVersion struct {
+	/* digits describing version of device soft */
+	Ver11 byte
+	Ver12 byte
+	Ver21 byte
+	Ver22 byte
 }
-*/
 
-// ReceivePacket receives a Packet
-func (d *GBCF) ReceivePacket() (*Packet, error) {
-	p := &Packet{}
-	n, err := d.fd.Read(p.bytes[:1])
+type GBCF struct {
+	fd  io.ReadWriteCloser
+	opt serial.OpenOptions
+}
+
+//Just open the serial device for low-level debugging
+func (d *GBCF) Connect() error {
+	f, err := serial.Open(d.opt)
+	d.fd = f
+	return err
+}
+
+func (d *GBCF) Disconnect() error {
+	e := d.fd.Close()
+	if e != nil {
+		d.fd = nil
+	}
+	return e
+}
+
+func (d *GBCF) GBCartInfo() (*GBCartInfo, error) {
+	_, dci, err := d.ReadStatus()
 	if err != nil {
 		return nil, err
 	}
-	if n < 1 {
-		return nil, errors.New("Failed to read first byte of packet.")
+	return dci.GBCartInfo(), nil
+}
+
+//Perform initialisation and return a MemCart
+func (d *GBCF) MemCart() (memcart.MemCart, error) {
+	//var gbc gbcart
+	if err := d.Connect(); err != nil {
+		return nil, err
 	}
-	// Non-DATA packets only send one byte over serial.
-	if ControlByte(p.bytes[0]) != DATA {
-		return p, nil
+	/*if err := d.Handshake(); err != nil {
+	return nil, err
+
+	*/
+
+	return nil, nil //d.Gbcart()
+}
+
+func (d *GBCF) ReadDeviceStatus() (*FirmwareVersion, error) {
+	pc := &PacketConfig{
+		Control:    DATA,
+		Command:    STATUS,
+		Subcommand: NREAD_ID,
+		Algorithm:  ALG16,
+		MBC:        MBCAUTO,
 	}
-	// Read rest of DATA packet.
-	n, err = d.fd.Read(p.bytes[1:])
+	p, err := pc.Packet()
 	if err != nil {
 		return nil, err
 	}
-	if n < PACKETSIZE-1 {
-		return nil, fmt.Errorf("Short packet: read %d bytes.", n+1)
+	if err := d.SendPacket(p); err != nil {
+		return nil, err
 	}
-	return p, nil
+	p, err = d.ReceivePacket()
+	if err != nil {
+		return nil, err
+	}
+	if err := p.Check(); err != nil {
+		return nil, err
+	}
+	return p.DeviceStatusShort(), nil
 }
 
 // readRAM reads all of RAM up to len(b), and returns an error if b is not
@@ -652,28 +399,281 @@ func (d *GBCF) ReadRAM(b []byte) error {
 	return nil
 }
 
+func (d *GBCF) ReadStatus() (*FirmwareVersion, *DeviceCartInfo, error) {
+	pc := &PacketConfig{
+		Control:    DATA,
+		Command:    STATUS,
+		Subcommand: READ_ID,
+		Algorithm:  ALG16,
+		MBC:        MBCAUTO,
+	}
+	p, err := pc.Packet()
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := d.SendPacket(p); err != nil {
+		return nil, nil, err
+	}
+	p, err = d.ReceivePacket()
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := p.Check(); err != nil {
+		return nil, nil, err
+	}
+	fw, dci := p.DeviceStatusLong()
+	return fw, dci, nil
+}
+
+// ReceivePacket receives a Packet
+func (d *GBCF) ReceivePacket() (*Packet, error) {
+	p := &Packet{}
+	n, err := d.fd.Read(p.bytes[:1])
+	if err != nil {
+		return nil, err
+	}
+	if n < 1 {
+		return nil, errors.New("Failed to read first byte of packet.")
+	}
+	// Non-DATA packets only send one byte over serial.
+	if ControlByte(p.bytes[0]) != DATA {
+		return p, nil
+	}
+	// Read rest of DATA packet.
+	n, err = d.fd.Read(p.bytes[1:])
+	if err != nil {
+		return nil, err
+	}
+	if n < PACKETSIZE-1 {
+		return nil, fmt.Errorf("Short packet: read %d bytes.", n+1)
+	}
+	return p, nil
+}
+
+//SendControl sends a control byte.
+func (d *GBCF) SendControl(cb ControlByte) error {
+	_, err := d.fd.Write([]byte{byte(cb)})
+	return err
+}
+
+// SendPacket sends a packet.
+func (d *GBCF) SendPacket(p *Packet) error {
+	b, err := p.Bytes()
+	if err != nil {
+		return err
+	}
+	n, err := d.fd.Write(p.bytes[:])
+	if err != nil {
+		return err
+	}
+	if n != len(b) {
+		return fmt.Errorf("short write: sent %d of %d", n, len(b))
+	}
+	return nil
+}
+
+func (d *GBCF) SetOptions(options serial.OpenOptions) {
+	d.opt = options
+}
+
+// GBCartInfo is human-readable version of DeviceCartInfo
+type GBCartInfo struct {
+	Manufacturer      string
+	ChipID            byte
+	BBL               bool
+	LogoCorrect       bool
+	CGB               bool
+	SGB               bool
+	ROMSize           string
+	RAMSize           string
+	CRC16             uint16
+	CartType          string
+	GameNamePrintable string
+}
+
 type GBCartRAM struct {
 	d          *GBCF
 	addressCur int64
 	size       int64
 }
 
-func (m *GBCartRAM) Name() string {
-	return "gbcartram"
-}
-
-func (m *GBCartRAM) Size() int64 {
-	return m.size
-}
-
 func (m *GBCartRAM) AlwaysWritable() bool {
 	return true
+}
+
+func (m *GBCartRAM) Name() string {
+	return "gbcartram"
 }
 
 func (m *GBCartRAM) Read(p []byte) (n int, err error) {
 	// wrap readRAM bytes with a reader
 	return 0, nil
 }
+
+func (m *GBCartRAM) Size() int64 {
+	return m.size
+}
+
+type Packet struct {
+	//control byte,
+	//command byte,
+	//subcommand byte,
+	//algo byte,
+	//mbc byte,
+	//frame byte[FRAMESIZE],
+	//crc16 uint16,
+	bytes [PACKETSIZE]byte
+}
+
+// Bytes returns a copy of the Packet bytes, with CRC filled in.
+func (p *Packet) Bytes() ([]byte, error) {
+	c := p.CRC16()
+	p.bytes[PACKETSIZE-2] = byte(c / 256)
+	p.bytes[PACKETSIZE-1] = byte(c % 256)
+	b := make([]byte, PACKETSIZE)
+	if n := copy(b, p.bytes[:]); n != PACKETSIZE {
+		return nil, fmt.Errorf("Serialise: copied %d of %d bytes", n, PACKETSIZE)
+	}
+	return b, nil
+}
+
+// CRC16 returns the CRC16 of a packet.
+// Original source defines its own crc16 function.
+// - the predefined table matches CRC16-CCITT-FALSE
+// - the initial CRC is 0x0000, as in CRC16-CCITT
+// - the function hashes the bytes of the packet and returns a short
+func (p *Packet) CRC16() uint16 {
+	var c uint16
+	for _, v := range p.bytes[:PACKETSIZE-2] {
+		c = (c << 8) ^ crc16Table[byte(c>>8)^v]
+	}
+	return c
+}
+
+// Check performs a CRC16 on a DATA packet (other control messages that
+// don't carry data don't have a check sum)
+func (p *Packet) Check() error {
+	if p.Control() != DATA {
+		return errors.New("Packet is not marked as DATA packet.")
+	}
+	c := p.CRC16()
+	if p.bytes[PACKETSIZE-2] != byte(c/256) ||
+		p.bytes[PACKETSIZE-1] != byte(c%256) {
+		return errors.New("CRC error in received packet.")
+	}
+	return nil
+}
+
+// Command returns the command byte from the packet as a CommandByte.
+func (p *Packet) Command() CommandByte {
+	return CommandByte(p.bytes[1])
+}
+
+// Control returns the control byte from the packet as a ControlByte.
+func (p *Packet) Control() ControlByte {
+	return ControlByte(p.bytes[0])
+}
+
+func (p *Packet) DeviceStatusLong() (*FirmwareVersion, *DeviceCartInfo) {
+	fw := p.DeviceStatusShort()
+	dci := &DeviceCartInfo{}
+	dci.ManufacturerID = p.bytes[4]
+	dci.ChipID = p.bytes[5]
+	dci.BBL = p.bytes[6]&0x01 == 0x01
+	dci.LogoCorrect = p.bytes[8] == 1
+	gnb := p.bytes[9:25]
+	i := bytes.IndexByte(gnb, 0x00)
+	if i >= 0 {
+		gnb = gnb[:i]
+	}
+	dci.GameNameBytes = make([]byte, len(gnb))
+	copy(dci.GameNameBytes, gnb)
+	dci.CGB = p.bytes[24] == 0x80
+	dci.SGB = p.bytes[27] == 0x03
+	dci.TypeID = p.bytes[28]
+	dci.ROMSize = p.bytes[29]
+	dci.RAMSize = p.bytes[30]
+	dci.CRC16 = 256*uint16(p.bytes[35]) + uint16(p.bytes[36])
+	return fw, dci
+}
+
+// DeviceStatusShort parses a STATUS(NREAD_ID) packet into a *FirmwareVersion.
+func (p *Packet) DeviceStatusShort() *FirmwareVersion {
+	fw := &FirmwareVersion{}
+	fw.Ver11 = p.bytes[2] / 16
+	fw.Ver12 = p.bytes[2] % 16
+	fw.Ver21 = p.bytes[3] / 16
+	fw.Ver22 = p.bytes[3] % 16
+	return fw
+}
+
+// Frame returns a slice (not a copy) of the underlying []byte that
+// refers to the packet's data frame.
+func (p *Packet) Frame() []byte {
+	return p.bytes[6:]
+}
+
+type PacketConfig struct {
+	Control    ControlByte
+	Command    CommandByte
+	Subcommand SubcommandByte
+	Algorithm  byte
+	MBC        byte
+	PageCount  int
+}
+
+// Packet validates the PacketConfig and returns a Packet.
+func (pc *PacketConfig) Packet() (*Packet, error) {
+	p := &Packet{}
+	// generated functions return "%T(%d)" for unknown values
+	if strings.HasPrefix(pc.Control.String(), "ControlByte") {
+		return nil, fmt.Errorf("Invalid control character for packet: %X", pc.Control)
+	}
+	p.bytes[0] = byte(pc.Control)
+	if strings.HasPrefix(pc.Command.String(), "CommandByte") {
+		return nil, fmt.Errorf("Invalid command character for packet: %X", pc.Command)
+	}
+	p.bytes[1] = byte(pc.Command)
+	// Subcommand values have a rango of 0 to N-1 for commands with N subcommands.
+	var n int
+	cb := CommandByte(p.bytes[1])
+	switch cb {
+	case CONFIG:
+		n = 4
+	case NORMAL_DATA:
+		n = 1
+	case LAST_DATA:
+		n = 1
+	case ERASE:
+		n = 2
+	case STATUS:
+		n = 2
+	default:
+		n = 1 // allow zeroing of packet
+	}
+	if int(pc.Subcommand) >= n {
+		return nil, fmt.Errorf("Subcommand value %d is invalid for %s.", pc.Subcommand, cb.String())
+	}
+	p.bytes[2] = byte(pc.Subcommand)
+	p.bytes[6] = byte((pc.PageCount - 1) / 256)
+	p.bytes[7] = byte((pc.PageCount - 1) % 256)
+	return p, nil
+}
+
+/*
+// Receive a character when a control character is expected
+func (d *GBCF) receive_char() (byte, error) {
+	b := make([]byte, 1)
+	n, err := d.fd.Read(b)
+	if err != nil {
+		return 0, err
+	}
+	if n < len(b) {
+		return 0, fmt.Errorf("short read: read %d of %d", n, len(b))
+	}
+	return b[0], nil
+}
+*/
 
 /* from fkmd:
 //Perform some initialisation and verify device ID, as per vendor driver
