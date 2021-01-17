@@ -108,6 +108,7 @@ const (
 
 const (
 	//enum error_t (signed char)
+	//TODO: verbose errors
 	TIMEOUT     = -1
 	FILEERROR_O = -2
 	FILEERROR_W = -3
@@ -363,6 +364,7 @@ func (d *GBCF) ReadRAM(b []byte) error {
 			}
 		} else {
 			if packet == 127 {
+				//TODO: check if a different response is needed
 				d.SendControl(ACK)
 			} else {
 				d.SendControl(ACK)
@@ -426,6 +428,9 @@ func (d *GBCF) ReceivePacket() (*Packet, error) {
 	if n < 1 {
 		return nil, errors.New("Failed to read first byte of packet.")
 	}
+	if p.bytes[0] < 0 {
+		return nil, fmt.Errorf("Received error value in ControlByte: %d", p.bytes[0])
+	}
 	// Non-DATA packets only send one byte over serial.
 	if ControlByte(p.bytes[0]) != DATA {
 		return p, nil
@@ -465,6 +470,78 @@ func (d *GBCF) SendPacket(p *Packet) error {
 
 func (d *GBCF) SetOptions(options serial.OpenOptions) {
 	d.opt = options
+}
+
+// WriteRAM writes b to cartridge RAM
+func (d *GBCF) WriteRAM(b []byte) error {
+	have := len(b)
+	pgc := 1
+	switch {
+	case have == 2*1024:
+	case have > 0 && have%(8*1024) == 0:
+		pgc = have / (8 * 1024)
+	default:
+		return fmt.Errorf("WriteRAM: invalid buffer size %d bytes, should be 2KiB or N*8KiB", have)
+	}
+	pc := &PacketConfig{
+		Control:    DATA,
+		Command:    CONFIG,
+		Subcommand: WRAM,
+		Algorithm:  ALG16,
+		MBC:        MBCAUTO,
+		PageCount:  pgc,
+	}
+	p, err := pc.Packet()
+	if err != nil {
+		return err
+	}
+	if err := d.SendPacket(p); err != nil {
+		return err
+	}
+	// TODO: original code has 10 retries
+	p, err = d.ReceivePacket()
+	if err != nil {
+		return err
+	}
+	cb := p.Control()
+	if cb != ACK {
+		return fmt.Errorf("WriteRAM: Unexpected response ControlByte to WRAM: %s", p.Control().String())
+	}
+	fin := false
+	n := 0
+	for fin == false {
+		page := uint16((n / FRAMESIZE) / 128) // 8kiB RAM page / 64B packet payload
+		packet := uint8((n / FRAMESIZE) % 128)
+		c := NORMAL_DATA
+		if n+FRAMESIZE >= len(b) {
+			c = LAST_DATA
+			fin = true
+		}
+		pc = &PacketConfig{
+			Control:     DATA,
+			Command:     c,
+			Subcommand:  RESERVED,
+			PacketIndex: packet,
+			PageIndex:   page,
+		}
+		p, err = pc.Packet()
+		if err != nil {
+			return err
+		}
+		n = n + p.Pack(b[n:n+FRAMESIZE])
+		fmt.Printf("DEBUG: buffer: %d page: %d packet: %d\n", n, page, packet)
+		if err := d.SendPacket(p); err != nil {
+			return err
+		}
+		p, err = d.ReceivePacket()
+		if err != nil {
+			return err
+		}
+		if cb := p.Control(); cb != ACK {
+			return fmt.Errorf("WriteRAM: Unexpected response ControlByte to sent data: %s", cb.String())
+		}
+	}
+	return nil
 }
 
 // GBCartInfo is human-readable version of DeviceCartInfo
@@ -534,6 +611,11 @@ func (p *Packet) CRC16() uint16 {
 	return c
 }
 
+// Pack fills a DATA packet for writing data to the device.
+func (p *Packet) Pack(b []byte) int {
+	return copy(p.bytes[6:6+FRAMESIZE], b)
+}
+
 // Check performs a CRC16 on a DATA packet (other control messages that
 // don't carry data don't have a check sum)
 func (p *Packet) Check() error {
@@ -594,19 +676,22 @@ func (p *Packet) DeviceStatusShort() *FirmwareVersion {
 // Frame returns a slice (not a copy) of the underlying []byte that
 // refers to the packet's data frame.
 func (p *Packet) Frame() []byte {
-	return p.bytes[6:]
+	return p.bytes[6 : 6+FRAMESIZE]
 }
 
 type PacketConfig struct {
-	Control    ControlByte
-	Command    CommandByte
-	Subcommand SubcommandByte
-	Algorithm  byte
-	MBC        byte
-	PageCount  int
+	Control     ControlByte
+	Command     CommandByte
+	Subcommand  SubcommandByte
+	Algorithm   byte   // *READ_ID, RRAM?
+	MBC         byte   // *READ_ID, RRAM?
+	PageCount   int    // RRAM
+	PacketIndex uint8  // WRAM
+	PageIndex   uint16 // WRAM
 }
 
 // Packet validates the PacketConfig and returns a Packet.
+// DATA packets only: use SendControl for others.
 func (pc *PacketConfig) Packet() (*Packet, error) {
 	p := &Packet{}
 	// generated functions return "%T(%d)" for unknown values
@@ -618,7 +703,7 @@ func (pc *PacketConfig) Packet() (*Packet, error) {
 		return nil, fmt.Errorf("Invalid command character for packet: %X", pc.Command)
 	}
 	p.bytes[1] = byte(pc.Command)
-	// Subcommand values have a rango of 0 to N-1 for commands with N subcommands.
+	// Subcommand values have a range of 0 to N-1 for commands with N subcommands.
 	var n int
 	cb := CommandByte(p.bytes[1])
 	switch cb {
@@ -639,7 +724,17 @@ func (pc *PacketConfig) Packet() (*Packet, error) {
 		return nil, fmt.Errorf("Subcommand value %d is invalid for %s.", pc.Subcommand, cb.String())
 	}
 	p.bytes[2] = byte(pc.Subcommand)
-	p.bytes[6] = byte((pc.PageCount - 1) / 256)
-	p.bytes[7] = byte((pc.PageCount - 1) % 256)
+	// TODO: nonzero Algorithm, MBC for STATUS
+	switch pc.Command {
+	case CONFIG:
+		p.bytes[6] = byte((pc.PageCount - 1) / 256)
+		p.bytes[7] = byte((pc.PageCount - 1) % 256)
+	case NORMAL_DATA:
+		fallthrough
+	case LAST_DATA:
+		p.bytes[3] = pc.PacketIndex
+		p.bytes[4] = uint8(pc.PageIndex / 256)
+		p.bytes[5] = uint8(pc.PageIndex % 256)
+	}
 	return p, nil
 }

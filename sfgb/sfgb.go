@@ -154,7 +154,7 @@ func main() {
 
 	err = d.Connect()
 	if err != nil {
-		elog.Println("Error opening serial port: ", err)
+		elog.Print("Error opening serial port: ", err)
 		os.Exit(-1)
 	} else {
 		defer d.Disconnect()
@@ -219,6 +219,7 @@ func main() {
 		//ReadRam(mdc, *ramfile, *autoname)
 		if *ramsize == 0 {
 			elog.Println("Cartridge RAM not detected (force attempt to read by setting explicit -ramsize).")
+			os.Exit(1)
 		}
 		dlog.Printf("Using ramfile: %s\n", *ramfile)
 		b := make([]byte, *ramsize)
@@ -231,7 +232,29 @@ func main() {
 
 	if *writeram {
 		//WriteRam(mdc, *ramfile)
-		elog.Println("writeram not implemented")
+		if *ramsize == 0 {
+			elog.Println("Cartridge RAM not detected (force attempt to write by setting explicit -ramsize).")
+			os.Exit(1)
+		}
+		dlog.Printf("Using ramfile: %s\n", *ramfile)
+		b, err := ioutil.ReadFile(*ramfile)
+		if err != nil {
+			elog.Print(err)
+			os.Exit(1)
+		}
+		have := len(b)
+		if have > *ramsize {
+			elog.Printf("ramfile (%d bytes) > ramsize (%d bytes), write will be limited to ramsize.", have, *ramsize)
+			b = b[:*ramsize]
+		}
+		if have < *ramsize {
+			elog.Printf("ramfile (%d bytes) < ramsize (%d bytes).", have, *ramsize)
+		}
+		err = d.WriteRAM(b)
+		if err != nil {
+			elog.Print(err)
+			os.Exit(1)
+		}
 	}
 
 	if *readrom {
