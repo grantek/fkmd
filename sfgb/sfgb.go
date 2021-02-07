@@ -82,6 +82,7 @@ func main() {
 	romfile := flag.String("romfile", "", "File to save or read ROM data (- for STDOUT/STDIN)")
 	ramfile := flag.String("ramfile", "", "File to save or read RAM data (- for STDOUT/STDIN)")
 	ramsize := flag.Int("ramsize", 0, "Size of RAM (0 to autodetect)")
+	romsize := flag.Int("romsize", 0, "Size of ROM (0 to autodetect)")
 	verbose := flag.Bool("verbose", false, "Output info logs to stderr")
 	debug := flag.Bool("debug", false, "Output debug logs to stderr (implies verbose)")
 
@@ -162,7 +163,7 @@ func main() {
 
 	var dci *gbcf.DeviceCartInfo
 	var gbci *gbcf.GBCartInfo
-	if *rominfo || *autoname || (*ramsize == 0) {
+	if *rominfo || *autoname || (*ramsize == 0) || (*romsize == 0) {
 		fv, err := d.ReadDeviceStatus()
 		if err != nil {
 			elog.Printf("ReadDeviceStatus: %v", err)
@@ -196,6 +197,12 @@ func main() {
 			}
 			fmt.Printf("Cart status:\n%s\n", string(b))
 		}
+		if *romsize == 0 {
+			*romsize = gbcf.RomSizeBytes[dci.ROMSize]
+		}
+		if *ramsize == 0 {
+			*ramsize = gbcf.RamSizeBytes[dci.RAMSize]
+		}
 	}
 	if *autoname {
 		r := strings.NewReplacer("/", "_", " ", "_")
@@ -211,12 +218,7 @@ func main() {
 		*ramfile = cartname + ".sav"
 	}
 
-	if *ramsize == 0 {
-		*ramsize = gbcf.RamSizeBytes[dci.RAMSize]
-	}
-
 	if *readram {
-		//ReadRam(mdc, *ramfile, *autoname)
 		if *ramsize == 0 {
 			elog.Println("Cartridge RAM not detected (force attempt to read by setting explicit -ramsize).")
 			os.Exit(1)
@@ -231,7 +233,6 @@ func main() {
 	}
 
 	if *writeram {
-		//WriteRam(mdc, *ramfile)
 		if *ramsize == 0 {
 			elog.Println("Cartridge RAM not detected (force attempt to write by setting explicit -ramsize).")
 			os.Exit(1)
@@ -258,8 +259,17 @@ func main() {
 	}
 
 	if *readrom {
-		//ReadRom(mdc, *romfile, *autoname)
-		elog.Println("readrom not implemented")
+		if *romsize == 0 {
+			elog.Println("Cartridge ROM not detected (force attempt to read by setting explicit -romsize).")
+			os.Exit(1)
+		}
+		dlog.Printf("Using romfile: %s\n", *ramfile)
+		b := make([]byte, *romsize)
+		err = d.ReadROM(b)
+		if err != nil {
+			elog.Println(err)
+		}
+		ioutil.WriteFile(*romfile, b, 0644)
 	}
 
 	if *writerom {

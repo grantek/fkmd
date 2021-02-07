@@ -377,6 +377,87 @@ func (d *GBCF) ReadRAM(b []byte) error {
 	return nil
 }
 
+// readROM reads all of ROM up to len(b), and returns an error if b is not
+// completely filled.
+func (d *GBCF) ReadROM(b []byte) error {
+	want := len(b)
+	pgc := 1
+	switch {
+	case want > 0 && want%(16*1024) == 0:
+		pgc = want / (16 * 1024)
+	default:
+		return fmt.Errorf("readROM: invalid buffer size %d bytes, N*16KiB", want)
+	}
+	pc := &PacketConfig{
+		Control:    DATA,
+		Command:    CONFIG,
+		Subcommand: RROM,
+		Algorithm:  ALG16,
+		MBC:        MBCAUTO,
+		PageCount:  pgc,
+	}
+	p, err := pc.Packet()
+	if err != nil {
+		return err
+	}
+	if err := d.SendPacket(p); err != nil {
+		return err
+	}
+	fin := false
+	n := 0
+	for fin == false {
+		page := (n / FRAMESIZE) / 256 // 16kiB ROM page / 64B packet payload
+		packet := (n / FRAMESIZE) % 256
+		p, err = d.ReceivePacket()
+		if err != nil {
+			// TODO: original code has 10 retries on serial TIMEOUT.
+			return err
+		}
+		switch pt := p.Control(); pt {
+		case DATA:
+		case END:
+			if n == want {
+				fmt.Printf("DEBUG: got END with full buffer at %d\n", n)
+				return nil
+			}
+			fallthrough
+		default:
+			return fmt.Errorf("readROM: unexpected control byte  %q: got %d bytes, want %d", pt, n, want)
+		}
+		if err := p.Check(); err != nil {
+			return err
+		}
+		cm := p.Command()
+		if cm != NORMAL_DATA && cm != LAST_DATA {
+			return fmt.Errorf("readROM: unexpected command byte %q: got %d bytes, want %d", cm, n, want)
+		}
+		pk := int(p.bytes[3])
+		pg := int(p.bytes[4])*256 + int(p.bytes[5])
+		if packet != pk || page != pg {
+			return fmt.Errorf("readROM: packet out of sequence: got %d,%d bytes, want %d,%d", pk, pg, packet, page)
+		}
+		if n+FRAMESIZE == want {
+			if cm == LAST_DATA {
+				fmt.Printf("DEBUG: got LAST_DATA at %d\n", n)
+			} else {
+				fmt.Printf("DEBUG: filled buffer with NORMAL_DATA command at %d\n", n)
+			}
+			fin = true
+		} else {
+			if packet == 255 {
+				//TODO: check if a different response is needed
+				d.SendControl(ACK)
+			} else {
+				d.SendControl(ACK)
+			}
+		}
+		copy(b[n:n+FRAMESIZE], p.Frame())
+		n = n + FRAMESIZE
+		fmt.Printf("DEBUG: buffer: %d page: %d packet: %d pk: %d pg: %d\n", n, page, packet, pk, pg)
+	}
+	return nil
+}
+
 func (d *GBCF) ReadStatus() (*FirmwareVersion, *DeviceCartInfo, error) {
 	pc := &PacketConfig{
 		Control:    DATA,
